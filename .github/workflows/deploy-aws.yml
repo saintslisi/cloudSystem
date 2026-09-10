@@ -77,14 +77,13 @@ jobs:
             mkdir -p ~/app/cloud/deploy/aws/k8s
             echo "Sto sincronizzando i manifest di Kubernetes..."
             
-      - name: Copy K8s Manifests to EC2
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ubuntu
-          key: ${{ secrets.EC2_SSH_KEY }}
-          source: "cloud/deploy/aws/k8s/*"
-          target: "~/app"
+      - name: Copy K8s Manifests to EC2 via SCP
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts
+          scp -r cloud/deploy/aws/k8s ubuntu@${{ secrets.EC2_HOST }}:~/app/cloud/deploy/aws/
 
       - name: Apply K8s Manifests
         uses: appleboy/ssh-action@v1.0.3
