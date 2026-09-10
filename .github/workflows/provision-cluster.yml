@@ -1,0 +1,27 @@
+name: Provision AWS K8s Cluster (Ansible)
+
+on:
+  workflow_dispatch: # Permette di avviarlo manualmente dal sito di GitHub
+
+jobs:
+  install-kubernetes:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Ansible
+        run: sudo apt-get update && sudo apt-get install -y ansible
+
+      - name: Esegui Ansible Playbook
+        env:
+          ANSIBLE_HOST_KEY_CHECKING: "False"
+        run: |
+          cd cloud/deploy/aws/ansible
+          
+          # Ricostruiamo la chiave privata dal secret
+          echo "${{ secrets.EC2_SSH_KEY }}" > ../terraform/k8s_key.pem
+          chmod 600 ../terraform/k8s_key.pem
+          
+          # Lanciamo l'installazione
+          ansible-playbook -i inventory/hosts.ini setup_k8s_cluster.yml --private-key ../terraform/k8s_key.pem
