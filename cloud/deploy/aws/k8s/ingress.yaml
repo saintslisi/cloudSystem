@@ -2,9 +2,8 @@ apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: cloud-ingress
-  annotations:
-    traefik.ingress.kubernetes.io/router.entrypoints: web
 spec:
+  ingressClassName: nginx
   rules:
   - host: sistemi-cloud-alb-726861933.eu-central-1.elb.amazonaws.com
     http:
