@@ -92,8 +92,8 @@ jobs:
           username: ubuntu
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
-            # Fix kubeconfig per usare localhost dall'interno della macchina (evita timeout del firewall AWS)
-            sed -i 's|server: https://.*:6443|server: https://127.0.0.1:6443|g' ~/.kube/config
+            # Il firewall AWS è ora aperto, quindi non c'è più bisogno di cambiare IP in 127.0.0.1.
+            # kubectl userà l'IP pubblico che è già configurato.
             
             cd ~/app/cloud/deploy/aws/k8s
             
