@@ -82,8 +82,7 @@ jobs:
           mkdir -p ~/.ssh
           echo "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
-          ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts
-          scp -r cloud/deploy/aws/k8s ubuntu@${{ secrets.EC2_HOST }}:~/app/cloud/deploy/aws/
+          scp -o StrictHostKeyChecking=no -i ~/.ssh/id_rsa -r cloud/deploy/aws/k8s ubuntu@${{ secrets.EC2_HOST }}:~/app/cloud/deploy/aws/
 
       - name: Apply K8s Manifests
         uses: appleboy/ssh-action@v1.0.3
