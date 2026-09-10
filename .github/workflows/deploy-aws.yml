@@ -1,26 +1,23 @@
-name: Deploy to AWS K3s
+name: Deploy to AWS EC2 K3s
 
 on:
   push:
     branches:
       - main
     paths:
-      - 'cloud/backend/**'
-      - 'cloud/frontend/**'
-      - 'cloud/workerAI/**'
-      - 'cloud/deploy/aws/k8s/**'
+      - 'cloud/**'
+      - '.github/workflows/deploy-aws.yml'
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_PREFIX: ${{ github.repository }}
+  IMAGE_NAME: saintslisi/cloudsystem
 
 jobs:
-  build-and-deploy:
+  build-and-push:
     runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -32,59 +29,75 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and push Backend Image
-        uses: docker/build-push-action@v5
+      - name: Extract metadata (tags, labels) for Docker
+        id: meta
+        uses: docker/metadata-action@v5
         with:
-          context: ./cloud
-          file: ./cloud/backend/Dockerfile
-          push: true
-          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/backend:latest
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
 
-      - name: Build and push Frontend Image
+      # Build Backend
+      - name: Build and push Backend image
         uses: docker/build-push-action@v5
         with:
-          context: ./cloud
-          file: ./cloud/frontend/Dockerfile
-          build-args: |
-            VITE_API_URL=http://sistemi-cloud-alb-726861933.eu-central-1.elb.amazonaws.com
+          context: ./cloud/backend
           push: true
-          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/frontend:latest
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/backend:latest
 
-      - name: Build and push Worker Image
+      # Build Frontend
+      - name: Build and push Frontend image
         uses: docker/build-push-action@v5
         with:
-          context: ./cloud
+          context: ./cloud/frontend
+          push: true
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/frontend:latest
+
+      # Build Worker
+      - name: Build and push Worker image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./
           file: ./cloud/workerAI/Dockerfile
           push: true
-          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/worker:latest
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/worker:latest
 
-      - name: Set up Kubectl
-        uses: azure/setup-kubectl@v3
+  deploy-to-aws:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Deploy to EC2 via SSH
+        uses: appleboy/ssh-action@v1.0.3
         with:
-          version: 'latest'
+          host: ${{ secrets.EC2_HOST }}
+          username: ubuntu
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            mkdir -p ~/app/cloud/deploy/aws/k8s
+            echo "Sto sincronizzando i manifest di Kubernetes..."
+            
+      - name: Copy K8s Manifests to EC2
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ubuntu
+          key: ${{ secrets.EC2_SSH_KEY }}
+          source: "cloud/deploy/aws/k8s/*"
+          target: "~/app"
 
-      - name: Configure Kubeconfig
-        run: |
-          mkdir -p ~/.kube
-          echo "${{ secrets.KUBE_CONFIG_DATA }}" | base64 --decode > ~/.kube/config
-          chmod 600 ~/.kube/config
-
-      - name: Update Kubernetes Manifests and Deploy
-        run: |
-          # Sostituiamo il placeholder con il repository reale in GHCR
-          cd cloud/deploy/aws/k8s/
-          
-          # Convert repository name to lowercase for GHCR
-          REPO_LOWER=$(echo "${{ env.IMAGE_PREFIX }}" | tr '[:upper:]' '[:lower:]')
-          
-          sed -i "s|IMAGE_REPO_PLACEHOLDER|${{ env.REGISTRY }}/${REPO_LOWER}|g" backend.yaml
-          sed -i "s|IMAGE_REPO_PLACEHOLDER|${{ env.REGISTRY }}/${REPO_LOWER}|g" frontend.yaml
-          sed -i "s|IMAGE_REPO_PLACEHOLDER|${{ env.REGISTRY }}/${REPO_LOWER}|g" worker.yaml
-          
-          # Applica i manifest al cluster remoto AWS
-          kubectl apply -f .
-          
-          # Forza il riavvio dei pod per scaricare le nuove immagini
-          kubectl rollout restart deployment backend
-          kubectl rollout restart deployment frontend
-          kubectl rollout restart deployment worker
+      - name: Apply K8s Manifests
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ubuntu
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            cd ~/app/cloud/deploy/aws/k8s
+            
+            # Autenticazione per K3s verso GHCR (se necessario, il cluster deve poter pullare le immagini private)
+            # In questo caso assumiamo che GHCR sia pubblico o configurato.
+            
+            # Forza l'aggiornamento dei pod
+            kubectl apply -f .
+            kubectl rollout restart deployment backend frontend worker
