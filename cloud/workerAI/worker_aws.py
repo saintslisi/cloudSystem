@@ -878,33 +878,58 @@ def check_and_export_test_gallery_json():
                 except Exception as e:
                     logging.error(f"Errore durante l'export in JSON di {p}: {e}")
 
+AWS_SQS_URL = os.getenv("AWS_SQS_URL")
+AWS_REGION = os.getenv("AWS_DEFAULT_REGION", "eu-central-1")
+
+class MockChannel:
+    def basic_ack(self, delivery_tag):
+        pass
+
+class MockMethod:
+    def __init__(self, tag):
+        self.delivery_tag = tag
+
 def start_worker():
     # Prima di avviare il worker, prepariamo i JSON per il frontend
     check_and_export_test_gallery_json()
     
-    connection = None
-    retries = 15
-    while retries > 0:
-        try:
-            logging.info(f"Tentativo di connessione a RabbitMQ ({RABBITMQ_HOST})...")
-            connection = pika.BlockingConnection(pika.ConnectionParameters(host=RABBITMQ_HOST, heartbeat=0))
-            break
-        except Exception as e:
-            retries -= 1
-            logging.warning(f"RabbitMQ in avvio ({e}). Riprovo tra 3 sec (tentativi rimasti: {retries})...")
-            time.sleep(3)
-
-    if connection is None:
-        logging.error("Impossibile connettersi a RabbitMQ dopo diversi tentativi.")
-        return
-
-    channel = connection.channel()
-    channel.queue_declare(queue='jobs_queue', durable=True)
-    channel.basic_qos(prefetch_count=1)
-    channel.basic_consume(queue='jobs_queue', on_message_callback=process_job)
+    import boto3
+    sqs = boto3.client('sqs', region_name=AWS_REGION)
     
-    logging.info("AI Worker attivo e in ascolto su RabbitMQ...")
-    channel.start_consuming()
+    logging.info(f"AI Worker AWS attivo e in ascolto su SQS ({AWS_SQS_URL})...")
+    
+    while True:
+        try:
+            response = sqs.receive_message(
+                QueueUrl=AWS_SQS_URL,
+                MaxNumberOfMessages=1,
+                WaitTimeSeconds=20
+            )
+            
+            if 'Messages' in response:
+                for message in response['Messages']:
+                    receipt_handle = message['ReceiptHandle']
+                    body = message['Body']
+                    
+                    try:
+                        # process_job uses ch and method just to call basic_ack
+                        ch_mock = MockChannel()
+                        method_mock = MockMethod(receipt_handle)
+                        
+                        process_job(ch_mock, method_mock, None, body.encode('utf-8'))
+                        
+                        # Eliminiamo il messaggio dalla coda una volta processato con successo
+                        sqs.delete_message(
+                            QueueUrl=AWS_SQS_URL,
+                            ReceiptHandle=receipt_handle
+                        )
+                    except Exception as e:
+                        logging.error(f"Errore durante l'elaborazione del job (SQS): {e}")
+            else:
+                pass
+        except Exception as e:
+            logging.error(f"Errore nella ricezione da SQS: {e}")
+            time.sleep(5)
 
 if __name__ == "__main__":
     start_worker()

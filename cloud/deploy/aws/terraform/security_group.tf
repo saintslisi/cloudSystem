@@ -1,6 +1,6 @@
-resource "aws_security_group" "k3s_nodes" {
-    name = "${var.project_name}-k3s-sg"
-    description = "Firewall per le macchine K3s"
+resource "aws_security_group" "k8s_nodes" {
+    name = "${var.project_name}-k8s-sg"
+    description = "Firewall per le macchine k8s"
 
     vpc_id = aws_vpc.main.id
 
@@ -45,7 +45,7 @@ resource "aws_security_group" "k3s_nodes" {
     }
 
     tags = {
-        Name = "${var.project_name}-k3s-sg"
+        Name = "${var.project_name}-k8s-sg"
     }
 
 }

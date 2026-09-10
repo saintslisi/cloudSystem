@@ -15,7 +15,7 @@ WORKER2_DISK="20G" # Più grande per scaricare container e dati
 
 # Il path reale della cartella data locale
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-DATA_PATH="$(dirname "$SCRIPT_DIR")/data"
+DATA_PATH="../../../data"
 
 set -e # Ferma lo script al primo errore
 
@@ -69,9 +69,10 @@ echo "k3s-master: $MASTER_IP"
 echo "k3s-worker-1: $WORKER1_IP"
 echo "k3s-worker-2: $WORKER2_IP"
 
+CLOUD_DIR="$(dirname "$(dirname "$SCRIPT_DIR")")"
 # Creazione dell'inventario Ansible
-mkdir -p ansible/inventory
-cat <<EOF > ansible/inventory/hosts.ini
+mkdir -p "$CLOUD_DIR/ansible/inventory"
+cat <<EOF > "$CLOUD_DIR/ansible/inventory/hosts.ini"
 [master]
 $MASTER_IP ansible_user=ubuntu ansible_ssh_common_args='-o StrictHostKeyChecking=no'
 
@@ -95,7 +96,7 @@ $MULTIPASS_CMD exec k3s-master -- bash -c "echo '$SSH_PUB_KEY' >> /home/ubuntu/.
 $MULTIPASS_CMD exec k3s-worker-1 -- bash -c "echo '$SSH_PUB_KEY' >> /home/ubuntu/.ssh/authorized_keys"
 $MULTIPASS_CMD exec k3s-worker-2 -- bash -c "echo '$SSH_PUB_KEY' >> /home/ubuntu/.ssh/authorized_keys"
 
-cat <<EOF > ansible/ansible.cfg
+cat <<EOF > "$CLOUD_DIR/ansible/ansible.cfg"
 [defaults]
 inventory = inventory/hosts.ini
 host_key_checking = False

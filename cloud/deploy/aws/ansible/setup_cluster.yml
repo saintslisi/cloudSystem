@@ -42,7 +42,7 @@
   hosts: workers
   become: yes
   vars:
-    master_ip: "{{ hostvars[groups['master'][0]]['ansible_host'] | default(groups['master'][0]) }}"
+    master_ip: "{{ hostvars[groups['master'][0]]['private_ip'] | default(hostvars[groups['master'][0]]['ansible_host']) }}"
     master_token: "{{ hostvars[groups['master'][0]]['k3s_token'] }}"
   tasks:
     - name: Download and install K3s agent

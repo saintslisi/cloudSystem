@@ -1,0 +1,50 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: worker
+spec:
+  selector:
+    matchLabels:
+      app: worker
+  template:
+    metadata:
+      labels:
+        app: worker
+    spec:
+      containers:
+      - name: worker
+        image: ghcr.io/saintslisi/cloudsystem/worker:latest
+        imagePullPolicy: Always
+        command: ["python", "worker_aws.py"]
+        securityContext:
+          runAsUser: 1000
+          privileged: true
+        env:
+        - name: POSTGRES_USER
+          value: "sistemicloud"
+        - name: POSTGRES_PASSWORD
+          value: "SistemiCloud2024!"
+        - name: POSTGRES_DB
+          value: "sistemicloud"
+        - name: POSTGRES_HOST
+          value: "sistemi-cloud-db.cde2gagou2tk.eu-central-1.rds.amazonaws.com"
+        - name: POSTGRES_PORT
+          value: "5432"
+        - name: REDIS_HOST
+          value: "sistemi-cloud-redis.6ak1wx.0001.euc1.cache.amazonaws.com"
+        - name: REDIS_PORT
+          value: "6379"
+        - name: AWS_SQS_URL
+          value: "https://sqs.eu-central-1.amazonaws.com/235901778853/sistemi-cloud-ai-task-queue"
+        - name: AWS_DEFAULT_REGION
+          value: "eu-central-1"
+        - name: PROJECT_DATA_DIR
+          value: "/app/data"
+        volumeMounts:
+        - name: data-volume
+          mountPath: /app/data
+      volumes:
+      - name: data-volume
+        hostPath:
+          path: /app/data
+          type: DirectoryOrCreate

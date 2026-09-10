@@ -1,0 +1,103 @@
+name: Deploy to AWS EC2 K3s
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'cloud/**'
+      - '.github/workflows/deploy-aws.yml'
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: saintslisi/cloudsystem
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Log in to the Container registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata (tags, labels) for Docker
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+
+      # Build Backend
+      - name: Build and push Backend image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./cloud/backend
+          push: true
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/backend:latest
+
+      # Build Frontend
+      - name: Build and push Frontend image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./cloud/frontend
+          push: true
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/frontend:latest
+
+      # Build Worker
+      - name: Build and push Worker image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./
+          file: ./cloud/workerAI/Dockerfile
+          push: true
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/worker:latest
+
+  deploy-to-aws:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Deploy to EC2 via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ubuntu
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            mkdir -p ~/app/cloud/deploy/aws/k8s
+            echo "Sto sincronizzando i manifest di Kubernetes..."
+            
+      - name: Copy K8s Manifests to EC2
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ubuntu
+          key: ${{ secrets.EC2_SSH_KEY }}
+          source: "cloud/deploy/aws/k8s/*"
+          target: "~/app"
+
+      - name: Apply K8s Manifests
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ubuntu
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            cd ~/app/cloud/deploy/aws/k8s
+            
+            # Autenticazione per K3s verso GHCR (se necessario, il cluster deve poter pullare le immagini private)
+            # In questo caso assumiamo che GHCR sia pubblico o configurato.
+            
+            # Forza l'aggiornamento dei pod
+            kubectl apply -f .
+            kubectl rollout restart deployment backend frontend worker

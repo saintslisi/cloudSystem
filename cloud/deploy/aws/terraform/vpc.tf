@@ -150,12 +150,12 @@ resource "aws_lb_listener" "http" {
 
 resource "aws_lb_target_group_attachment" "worker_1" {
     target_group_arn = aws_lb_target_group.web.arn
-    target_id = aws_instance.k3s_worker_1.id
+    target_id = aws_instance.k8s_worker_1.id
     port = 80
 }
 
 resource "aws_lb_target_group_attachment" "master" {
     target_group_arn = aws_lb_target_group.web.arn
-    target_id = aws_instance.k3s_master.id
+    target_id = aws_instance.k8s_master.id
     port = 80
 }

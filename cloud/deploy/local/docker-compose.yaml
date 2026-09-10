@@ -12,10 +12,9 @@ services:
       POSTGRES_DB: ${POSTGRES_DB}
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./db_schema:/docker-entrypoint-initdb.d
+      - ../../db_schema:/docker-entrypoint-initdb.d
     networks:
       - cloud_network
-
   redis:
     image: redis:7-alpine
     ports:
@@ -36,7 +35,7 @@ services:
 
   backend:
     build:
-      context: ./backend
+      context: ../../backend
       dockerfile: Dockerfile
     container_name: local_backend
     restart: on-failure
@@ -53,7 +52,7 @@ services:
       - REDIS_HOST=redis
       - REDIS_PORT=${REDIS_PORT}
     volumes:
-      - ../data:/app/data
+      - "${PROJECT_DATA_DIR:-../../../data}:/app/data"
     depends_on:
       - postgres
       - rabbitmq
@@ -63,7 +62,7 @@ services:
 
   frontend:
     build:
-      context: ./frontend
+      context: ../../frontend
       dockerfile: Dockerfile
     container_name: local_frontend
     restart: on-failure
@@ -78,12 +77,12 @@ services:
 
   worker:
     build:
-      context: ../
+      context: ../../../
       dockerfile: cloud/workerAI/Dockerfile
     container_name: local_worker
     restart: on-failure
     env_file:
-      - .env
+      - ../../.env
     environment:
       - RABBITMQ_HOST=rabbitmq
       - RABBITMQ_PORT=${RABBITMQ_PORT}
@@ -95,7 +94,7 @@ services:
       - REDIS_HOST=redis
       - REDIS_PORT=${REDIS_PORT}
     volumes:
-      - ../data:/app/data
+      - "${PROJECT_DATA_DIR:-../../../data}:/app/data"
     depends_on:
       - rabbitmq
       - postgres

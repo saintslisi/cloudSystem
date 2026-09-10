@@ -2,9 +2,9 @@
 set -e
 
 echo "🐳 1. Costruzione delle immagini Docker locali..."
-docker build -t backend:latest ./backend
-docker build -t frontend:latest ./frontend
-docker build -t worker:latest -f ./workerAI/Dockerfile ../
+docker build -t backend:latest ../../backend
+docker build -t frontend:latest ../../frontend
+docker build -t worker:latest -f ../../workerAI/Dockerfile ../../../
 
 IMAGE_TAR="/home/santi/project-images-k3s.tar"
 

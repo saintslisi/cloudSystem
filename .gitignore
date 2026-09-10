@@ -63,3 +63,12 @@ venv/
 # Wheel offline per l'installazione sul cluster senza rete
 wheels/
 similarity_examples/
+
+# Terraform and Cloud
+.terraform/
+.terraform.lock.hcl
+*.tfstate
+*.tfstate.backup
+*.tar
+*.pem
+kubeconfig

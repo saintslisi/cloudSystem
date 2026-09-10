@@ -44,14 +44,14 @@ def run_ssh_command(command):
 
 def upload_file(local_path, remote_path):
     """Carica un file sul cluster via SCP"""
-    print(f"[SCP Upload] {local_path} -> {SSH_TARGET}:{remote_path}")
+    logging.info(f"[SCP Upload] {local_path} -> {SSH_TARGET}:{remote_path}")
     with get_ssh_client() as ssh:
         with SCPClient(ssh.get_transport()) as scp:
             scp.put(local_path, remote_path)
 
 def download_file(remote_path, local_path):
     """Scarica un file dal cluster via SCP"""
-    print(f"[SCP Download] {SSH_TARGET}:{remote_path} -> {local_path}")
+    logging.info(f"[SCP Download] {SSH_TARGET}:{remote_path} -> {local_path}")
     with get_ssh_client() as ssh:
         with SCPClient(ssh.get_transport()) as scp:
             scp.get(remote_path, local_path)
@@ -59,11 +59,11 @@ def download_file(remote_path, local_path):
 
 def wait_for_job(job_id):
     """Esegue il polling di squeue finché il job non sparisce dalla coda"""
-    print(f"[SLURM] Attesa completamento Job {job_id}...")
+    logging.info(f"[SLURM] Attesa completamento Job {job_id}...")
     while True:
         stdout = run_ssh_command(f"squeue -j {job_id} -h")
         if not stdout.strip():
-            print(f"[SLURM] Job {job_id} completato e rimosso dalla coda.")
+            logging.info(f"[SLURM] Job {job_id} completato e rimosso dalla coda.")
             break
         time.sleep(10)  # Controlla ogni 10 secondi per non inondare il server di richieste
 
@@ -86,9 +86,9 @@ def run_vlm_phase(job_id_db: str, image_filename: str):
     """
     Gestisce il caricamento dell'immagine e l'estrazione dello Scene Graph tramite VLM.
     """
-    print("\n" + "="*50)
-    print(f"AVVIO FASE VLM PER JOB: {job_id_db}")
-    print("="*50)
+    logging.info("\n" + "="*50)
+    logging.info(f"AVVIO FASE VLM PER JOB: {job_id_db}")
+    logging.info("="*50)
     
     candidates = [
         os.path.join("/tmp", image_filename),
@@ -103,7 +103,7 @@ def run_vlm_phase(job_id_db: str, image_filename: str):
         raise FileNotFoundError(f"Immagine non trovata in locale per upload HPC: {local_image_path}")
 
     # Fase 1: Creazione cartelle remote e Upload Immagine
-    print("\n--- FASE 1: Upload Immagine e Sincronizzazione Script ---")
+    logging.info("\n--- FASE 1: Upload Immagine e Sincronizzazione Script ---")
     run_ssh_command(f"mkdir -p {CLUSTER_PROJECT_DIR}/data/images/inference {CLUSTER_PROJECT_DIR}/data/sceneGraph/Raw/inference {CLUSTER_PROJECT_DIR}/data/sceneGraph/embedded/inference {CLUSTER_PROJECT_DIR}/logs")
     upload_file(local_image_path, remote_image_path)
     
@@ -118,11 +118,11 @@ def run_vlm_phase(job_id_db: str, image_filename: str):
         upload_file(local_script, f"{CLUSTER_PROJECT_DIR}/script/VLM/dynamic_extractor.py")
     
     # Fase 2: Lancio Estrazione Grafo (Qwen2.5-VL)
-    print("\n--- FASE 2: Estrazione VLM ---")
+    logging.info("\n--- FASE 2: Estrazione VLM ---")
     vlm_job_id = submit_sbatch(SBATCH_VLM_SCRIPT, args=f"Qwen/Qwen2.5-VL-7B-Instruct data/images/inference/{image_filename} {job_id_db}")
     wait_for_job(vlm_job_id)
 
-    print("\n--- Download Risultato VLM ---")
+    logging.info("\n--- Download Risultato VLM ---")
     remote_raw_pt = f"{CLUSTER_PROJECT_DIR}/data/sceneGraph/Raw/inference/{job_id_db}.pt"
     local_raw_dir = os.path.join("data", "sceneGraph", "Raw", "inference")
     try:
@@ -135,7 +135,7 @@ def run_vlm_phase(job_id_db: str, image_filename: str):
     download_file(remote_raw_pt, tmp_raw_pt)
     os.system(f"cp {tmp_raw_pt} {local_raw_pt}")
     
-    print(f"VLM Completato. File Raw scaricato in: {local_raw_pt}")
+    logging.info(f"VLM Completato. File Raw scaricato in: {local_raw_pt}")
     return local_raw_pt
 
 def run_embedding_phase(job_id_db: str, image_filename: str = None):

@@ -329,19 +329,21 @@ def save_custom_image(job_id: str):
     db.close()
     return {"message": "Immagine custom salvata con successo"}
 
+AWS_SQS_URL = os.getenv("AWS_SQS_URL")
+AWS_REGION = os.getenv("AWS_DEFAULT_REGION", "eu-central-1")
+
 def publish_to_queue(message: dict) -> bool:
     try:
-        conn = pika.BlockingConnection(pika.ConnectionParameters(RABBITMQ_HOST))
-        channel = conn.channel()
-        channel.queue_declare(queue='jobs_queue', durable=True)
-        channel.basic_publish(
-                            properties=pika.BasicProperties(delivery_mode=2),
-                            exchange='', routing_key='jobs_queue', 
-                            body=json.dumps(message))
-        conn.close()
+        import boto3
+        sqs = boto3.client('sqs', region_name=AWS_REGION)
+        sqs.send_message(
+            QueueUrl=AWS_SQS_URL,
+            MessageBody=json.dumps(message)
+        )
+        logging.info(f"Messaggio inviato con successo a SQS per il job {message.get('job_id')}")
         return True
     except Exception as e:
-        logging.error(f"Errore invio in coda: {str(e)}")
+        logging.error(f"Errore invio in coda SQS: {str(e)}")
         return False
 
 

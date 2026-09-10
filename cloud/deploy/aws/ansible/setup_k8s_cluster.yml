@@ -1,0 +1,176 @@
+---
+- name: Preparazione di tutti i nodi (Master e Workers)
+  hosts: all
+  become: yes
+  tasks:
+    - name: Disabilita lo swap
+      command: swapoff -a
+
+    - name: Rimuovi lo swap da fstab
+      replace:
+        path: /etc/fstab
+        regexp: '^([^#].*?\sswap\s+sw\s+.*)$'
+        replace: '# \1'
+
+    - name: Carica i moduli del kernel necessari
+      modprobe:
+        name: "{{ item }}"
+        state: present
+      loop:
+        - overlay
+        - br_netfilter
+
+    - name: Imposta i parametri sysctl per Kubernetes
+      sysctl:
+        name: "{{ item.name }}"
+        value: "{{ item.value }}"
+        state: present
+        reload: yes
+      loop:
+        - { name: 'net.bridge.bridge-nf-call-iptables', value: '1' }
+        - { name: 'net.bridge.bridge-nf-call-ip6tables', value: '1' }
+        - { name: 'net.ipv4.ip_forward', value: '1' }
+
+    - name: Installa pacchetti dipendenze
+      apt:
+        name:
+          - apt-transport-https
+          - ca-certificates
+          - curl
+          - software-properties-common
+          - gpg
+        state: present
+        update_cache: yes
+
+    - name: Crea cartella keyrings
+      file:
+        path: /etc/apt/keyrings
+        state: directory
+        mode: '0755'
+
+    - name: Aggiungi la chiave GPG ufficiale di Docker
+      shell: curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+      args:
+        creates: /etc/apt/keyrings/docker.gpg
+
+    - name: Aggiungi il repository di Docker
+      copy:
+        content: "deb [arch=amd64 signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu jammy stable"
+        dest: /etc/apt/sources.list.d/docker.list
+
+    - name: Installa containerd
+      apt:
+        name: containerd.io
+        state: present
+        update_cache: yes
+
+    - name: Genera configurazione di default per containerd
+      shell: containerd config default > /etc/containerd/config.toml
+
+    - name: Configura SystemdCgroup per containerd
+      replace:
+        path: /etc/containerd/config.toml
+        regexp: 'SystemdCgroup = false'
+        replace: 'SystemdCgroup = true'
+
+    - name: Riavvia e abilita containerd
+      systemd:
+        name: containerd
+        state: restarted
+        enabled: yes
+
+    - name: Scarica la chiave GPG di Kubernetes (v1.28)
+      shell: curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.28/deb/Release.key | sudo gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+      args:
+        creates: /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+
+    - name: Aggiungi il repository APT di Kubernetes
+      copy:
+        content: "deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.28/deb/ /"
+        dest: /etc/apt/sources.list.d/kubernetes.list
+
+    - name: Installa kubelet, kubeadm e kubectl
+      apt:
+        name:
+          - kubelet
+          - kubeadm
+          - kubectl
+        state: present
+        update_cache: yes
+
+    - name: Blocca la versione dei pacchetti kubernetes (hold)
+      dpkg_selections:
+        name: "{{ item }}"
+        selection: hold
+      loop:
+        - kubelet
+        - kubeadm
+        - kubectl
+
+- name: Inizializzazione del Master Node
+  hosts: master
+  become: yes
+  tasks:
+    - name: Inizializza il cluster Kubernetes con kubeadm
+      command: kubeadm init --pod-network-cidr=10.244.0.0/16 --apiserver-cert-extra-sans={{ ansible_host }}
+      args:
+        creates: /etc/kubernetes/admin.conf
+      register: kubeadm_init
+
+    - name: Crea directory .kube per l'utente ubuntu
+      file:
+        path: /home/ubuntu/.kube
+        state: directory
+        owner: ubuntu
+        group: ubuntu
+        mode: '0755'
+
+    - name: Copia admin.conf nella directory utente
+      copy:
+        src: /etc/kubernetes/admin.conf
+        dest: /home/ubuntu/.kube/config
+        remote_src: yes
+        owner: ubuntu
+        group: ubuntu
+
+    - name: Aggiusta permessi kubeconfig su master
+      file:
+        path: /home/ubuntu/.kube/config
+        owner: ubuntu
+        group: ubuntu
+        mode: '0600'
+
+    - name: Cambia il localhost con IP pubblico nel config (per accesso locale)
+      replace:
+        path: /home/ubuntu/.kube/config
+        regexp: 'server: https://.*:6443'
+        replace: 'server: https://{{ ansible_host }}:6443'
+
+    - name: Installa Flannel (Pod Network)
+      become_user: ubuntu
+      command: kubectl apply -f https://github.com/flannel-io/flannel/releases/latest/download/kube-flannel.yml
+
+    - name: Genera il comando di join per i worker
+      command: kubeadm token create --print-join-command
+      register: join_command
+
+    - name: Salva il comando di join
+      set_fact:
+        k8s_join_command: "{{ join_command.stdout }}"
+
+    - name: Scarica il kubeconfig in locale
+      fetch:
+        src: /home/ubuntu/.kube/config
+        dest: ../kubeconfig
+        flat: yes
+
+- name: Configurazione dei Worker Nodes
+  hosts: workers
+  become: yes
+  vars:
+    join_command: "{{ hostvars[groups['master'][0]]['k8s_join_command'] }}"
+  tasks:
+    - name: Unisci i worker al cluster
+      command: "{{ join_command }}"
+      args:
+        creates: /etc/kubernetes/kubelet.conf

@@ -11,22 +11,13 @@ spec:
       labels:
         app: frontend
     spec:
-      affinity:
-        nodeAffinity:
-          requiredDuringSchedulingIgnoredDuringExecution:
-            nodeSelectorTerms:
-            - matchExpressions:
-              - key: kubernetes.io/hostname
-                operator: In
-                values:
-                - k3s-worker-1
       containers:
       - name: frontend
-        image: frontend:latest
-        imagePullPolicy: Never
+        image: ghcr.io/saintslisi/cloudsystem/frontend:latest
+        imagePullPolicy: Always
         env:
         - name: VITE_API_URL
-          value: "http://localhost:8000"
+          value: "http://sistemi-cloud-alb-726861933.eu-central-1.elb.amazonaws.com"
         ports:
         - containerPort: 5173
 ---
