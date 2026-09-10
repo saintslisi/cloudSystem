@@ -31,7 +31,7 @@ data "aws_ami" "ubuntu" {
 # k8s Master Node
 resource "aws_instance" "k8s_master" {
     ami = data.aws_ami.ubuntu.id
-    instance_type = "t3.micro"
+    instance_type = "t3.small"
     subnet_id = aws_subnet.public[0].id
     vpc_security_group_ids = [aws_security_group.k8s_nodes.id]
     key_name = aws_key_pair.k8s_key.key_name
@@ -46,7 +46,7 @@ resource "aws_instance" "k8s_master" {
 #k8s Worker Node 1 (Frontend/Backend)
 resource "aws_instance" "k8s_worker_1"{
     ami = data.aws_ami.ubuntu.id
-    instance_type = "t3.micro"
+    instance_type = "t3.small"
     subnet_id = aws_subnet.private[0].id
     vpc_security_group_ids = [aws_security_group.k8s_nodes.id]
     key_name = aws_key_pair.k8s_key.key_name
@@ -60,7 +60,7 @@ resource "aws_instance" "k8s_worker_1"{
 #k8s Worker Node 2 (AI Worker)
 resource "aws_instance" "k8s_worker_2" {
     ami = data.aws_ami.ubuntu.id
-    instance_type = "t3.micro"
+    instance_type = "t3.small"
     subnet_id = aws_subnet.private[1].id
     vpc_security_group_ids = [aws_security_group.k8s_nodes.id]
     key_name = aws_key_pair.k8s_key.key_name
