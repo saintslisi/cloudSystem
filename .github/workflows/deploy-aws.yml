@@ -93,6 +93,9 @@ jobs:
           username: ubuntu
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
+            # Fix kubeconfig per usare localhost dall'interno della macchina (evita timeout del firewall AWS)
+            sed -i 's|server: https://.*:6443|server: https://127.0.0.1:6443|g' ~/.kube/config
+            
             cd ~/app/cloud/deploy/aws/k8s
             
             # Autenticazione per K3s verso GHCR (se necessario, il cluster deve poter pullare le immagini private)
