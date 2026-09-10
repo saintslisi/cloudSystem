@@ -26,6 +26,16 @@ resource "aws_security_group" "k8s_nodes" {
 
     }
 
+    # Kube API Server
+    ingress{
+        description = "Kubernetes API Server"
+
+        from_port = 6443
+        to_port = 6443
+        protocol = "tcp"
+        cidr_blocks = ["0.0.0.0/0"]
+    }
+
     # Server traffic
     ingress {
         description = "inner vpc traffic"
