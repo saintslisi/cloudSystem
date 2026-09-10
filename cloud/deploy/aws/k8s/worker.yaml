@@ -17,7 +17,6 @@ spec:
         imagePullPolicy: Always
         command: ["python", "worker_aws.py"]
         securityContext:
-          runAsUser: 1000
           privileged: true
         env:
         - name: POSTGRES_USER
