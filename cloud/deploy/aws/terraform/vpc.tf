@@ -133,6 +133,7 @@ resource "aws_lb_target_group" "web" {
         unhealthy_threshold = 10
         timeout = 5
         interval = 10
+        matcher = "200-499"
     }
 }
 
