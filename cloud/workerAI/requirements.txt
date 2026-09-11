@@ -8,3 +8,4 @@ scp
 Pillow
 transformers
 faiss-cpu
+boto3
