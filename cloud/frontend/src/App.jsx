@@ -16,6 +16,8 @@ const getApiBaseUrl = () => {
 
 function App() {
   const API_BASE_URL = getApiBaseUrl();
+  const isCloudMode = typeof window !== 'undefined' && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1';
+  
   const [file, setFile] = useState(null); // File caricato a sinistra
   const [filePreview, setFilePreview] = useState(null); // URL temporaneo per mostrare l'anteprima dell'immagine caricata
   const [testImages, setTestImages] = useState([]); // Pool di 700 immagini da Postgres
@@ -365,7 +367,7 @@ function App() {
                     style={{ marginLeft: '10px', padding: '8px', borderRadius: '5px' }}
                   >
                     <option value="fullset">Fullset 55k (Definitivo)</option>
-                    <option value="subset">Subset (Sperimentale)</option>
+                    {!isCloudMode && <option value="subset">Subset (Sperimentale)</option>}
                     <option value="zeroshot">Zero-Shot (Baseline Visiva)</option>
                   </select>
                 </div>
@@ -392,12 +394,14 @@ function App() {
                           <option value="semantic_web_gcn_sage_ntxent">GCN SAGE NTXent</option>
                         </optgroup>
                         
-                        <optgroup label="GCN Baseline (Senza Ontologia)">
-                          <option value="baseline_gcn_gine_triplet">GCN GINE Triplet</option>
-                          <option value="baseline_gcn_sage_triplet">GCN SAGE Triplet</option>
-                          <option value="baseline_gcn_gine_ntxent">GCN GINE NTXent</option>
-                          <option value="baseline_gcn_sage_ntxent">GCN SAGE NTXent</option>
-                        </optgroup>
+                        {!isCloudMode && (
+                          <optgroup label="GCN Baseline (Senza Ontologia)">
+                            <option value="baseline_gcn_gine_triplet">GCN GINE Triplet</option>
+                            <option value="baseline_gcn_sage_triplet">GCN SAGE Triplet</option>
+                            <option value="baseline_gcn_gine_ntxent">GCN GINE NTXent</option>
+                            <option value="baseline_gcn_sage_ntxent">GCN SAGE NTXent</option>
+                          </optgroup>
+                        )}
                       </>
                     )}
                   </select>
@@ -413,7 +417,7 @@ function App() {
                   style={{ marginLeft: '10px', padding: '8px', borderRadius: '5px' }}
                 >
                   <option value="fullset">Fullset (~20k immagini test)</option>
-                  <option value="subset">Subset (~3k immagini test)</option>
+                  {!isCloudMode && <option value="subset">Subset (~3k immagini test)</option>}
                 </select>
               </div>
             </div>
