@@ -53,6 +53,26 @@ GCN_MODEL = None
 GALLERY_DATA = None
 LOADED_VISION_MODELS = {}
 
+def ensure_local_file(local_path):
+    import os
+    if os.path.exists(local_path):
+        return
+    import boto3
+    s3 = boto3.client('s3', region_name=os.getenv("AWS_DEFAULT_REGION", "eu-central-1"))
+    data_dir = get_data_dir()
+    if not local_path.startswith(data_dir):
+        return
+    s3_key = local_path[len(data_dir):].lstrip("/")
+    bucket = "sistemi-cloud-data-santi"
+    import logging
+    logging.info(f"Scaricamento di {s3_key} da S3 in corso...")
+    try:
+        os.makedirs(os.path.dirname(local_path), exist_ok=True)
+        s3.download_file(bucket, s3_key, local_path)
+        logging.info(f"Scaricato con successo: {local_path}")
+    except Exception as e:
+        logging.error(f"Errore nello scaricamento di {s3_key} da S3: {e}")
+
 def get_data_dir() -> str:
     """Restituisce il percorso corretto della cartella Data."""
     env_dir = os.getenv("PROJECT_DATA_DIR")
@@ -140,6 +160,8 @@ def load_gcn_model(training_set, architecture):
 
     if not os.path.exists(ckpt_path):
         ckpt_path = os.path.join(data_dir, "models", "fullset", "checkpoints", ckpt_name)
+
+    ensure_local_file(ckpt_path)
 
     if os.path.exists(ckpt_path):
         logging.info(f"Caricamento checkpoint GCN da: {ckpt_path}...")
@@ -229,6 +251,9 @@ def load_gallery_data(training_set, vector_db_size, architecture):
                     if os.path.exists(alt_index_path):
                         index_path = alt_index_path
 
+    ensure_local_file(pt_path)
+    ensure_local_file(index_path)
+
     gallery = {"embeddings": None, "image_ids": [], "faiss_index": None}
 
     if os.path.exists(pt_path):
@@ -314,6 +339,7 @@ def loadTestEmbeddings(test_image_id: str, training_set: str, vector_db_size: st
                         if os.path.exists(alt_queries_path):
                             queries_path = alt_queries_path
 
+        ensure_local_file(queries_path)
         if os.path.exists(queries_path):
             dataset = torch.load(queries_path, map_location="cpu", weights_only=False)
             
@@ -346,6 +372,7 @@ def loadTestEmbeddings(test_image_id: str, training_set: str, vector_db_size: st
                         else:
                             native_path = os.path.join(data_dir, "models", "subset", "baseline", f"{m}_test_queries.pt")
 
+                    ensure_local_file(native_path)
                     if os.path.exists(native_path):
                         try:
                             native_dataset = torch.load(native_path, map_location="cpu", weights_only=False)
@@ -502,8 +529,7 @@ def process_job(ch, method, properties, body):
                         data_dir = get_data_dir()
                         candidate_graphs_paths = [
                             os.path.join(data_dir, "sceneGraph", "subset", "semantic", "embedded", "test_queries_scene_graphs.pt"),
-                            os.path.join(data_dir, "sceneGraph", "fullset", "semantic", "embedded", "test_queries_scene_graphs.pt"),
-                            os.path.join(data_dir, "sceneGraph", "fullset", "semantic", "embedded", "test_gallery_scene_graphs.pt")
+                            os.path.join(data_dir, "sceneGraph", "fullset", "semantic", "embedded", "test_queries_scene_graphs.pt")
                         ]
                         
                         found_graph = None
