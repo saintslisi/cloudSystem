@@ -20,11 +20,11 @@ spec:
           privileged: true
         env:
         - name: POSTGRES_USER
-          value: "sistemicloud"
+          value: "dbadmin"
         - name: POSTGRES_PASSWORD
-          value: "SistemiCloud2024!"
+          value: "SuperSecretPassword123!"
         - name: POSTGRES_DB
-          value: "sistemicloud"
+          value: "gcndatabase"
         - name: POSTGRES_HOST
           value: "sistemi-cloud-db.cde2gagou2tk.eu-central-1.rds.amazonaws.com"
         - name: POSTGRES_PORT
