@@ -49,17 +49,26 @@ DATA_DIR = get_data_dir()
 os.makedirs(os.path.join(DATA_DIR, "images", "imagesTest"), exist_ok=True)
 os.makedirs(os.path.join(DATA_DIR, "images", "imageVectorDB"), exist_ok=True)
 
+import boto3
+from fastapi.responses import RedirectResponse
+from botocore.client import Config
+
+s3_client = boto3.client(
+    's3', 
+    region_name="eu-central-1", 
+    endpoint_url="https://s3.eu-central-1.amazonaws.com",
+    config=Config(signature_version='s3v4')
+)
+S3_BUCKET = "sistemi-cloud-data-santi"
+
 @app.get("/static/vectorDB/{filename}")
 def get_vector_db_image(filename: str):
-    try:
-        presigned_url = s3_client.generate_presigned_url(
-            'get_object',
-            Params={'Bucket': S3_BUCKET, 'Key': f'images/fullset/VectorDB/{filename}'},
-            ExpiresIn=3600
-        )
-        return RedirectResponse(presigned_url)
-    except Exception as e:
-        raise HTTPException(status_code=404, detail=f"Image {filename} not found in S3")
+    presigned_url = s3_client.generate_presigned_url(
+        'get_object',
+        Params={'Bucket': S3_BUCKET, 'Key': f'images/fullset/VectorDB/{filename}'},
+        ExpiresIn=3600
+    )
+    return RedirectResponse(presigned_url)
 
 @app.get("/static/test_images/{filename}")
 def get_test_image(filename: str):
@@ -68,26 +77,28 @@ def get_test_image(filename: str):
     if os.path.exists(custom_path):
         return FileResponse(custom_path)
         
-    try:
-        presigned_url = s3_client.generate_presigned_url(
-            'get_object',
-            Params={'Bucket': S3_BUCKET, 'Key': f'images/fullset/Test/{filename}'},
-            ExpiresIn=3600
-        )
-        return RedirectResponse(presigned_url)
-    except Exception as e:
-        raise HTTPException(status_code=404, detail=f"Image {filename} not found in S3")
+    presigned_url = s3_client.generate_presigned_url(
+        'get_object',
+        Params={'Bucket': S3_BUCKET, 'Key': f'images/fullset/Test/{filename}'},
+        ExpiresIn=3600
+    )
+    return RedirectResponse(presigned_url)
 
 @app.get("/static/inference/{filename}")
 def get_inference_image(filename: str):
     candidate_paths = [
         "/tmp/local_inference_images/" + filename,
-        os.path.join(DATA_DIR, "images", "inference", filename),
     ]
     for path in candidate_paths:
         if os.path.exists(path):
             return FileResponse(path)
-    raise HTTPException(status_code=404, detail=f"Image {filename} not found")
+            
+    presigned_url = s3_client.generate_presigned_url(
+        'get_object',
+        Params={'Bucket': S3_BUCKET, 'Key': f'images/inference/{filename}'},
+        ExpiresIn=3600
+    )
+    return RedirectResponse(presigned_url)
 
 @app.get("/api/v1/graph/{image_id}")
 def get_graph(image_id: str):
