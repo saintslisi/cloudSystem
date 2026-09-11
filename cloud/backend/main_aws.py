@@ -51,30 +51,32 @@ os.makedirs(os.path.join(DATA_DIR, "images", "imageVectorDB"), exist_ok=True)
 
 @app.get("/static/vectorDB/{filename}")
 def get_vector_db_image(filename: str):
-    candidate_paths = [
-        os.path.join(DATA_DIR, "images", "fullset", "VectorDB", filename),
-        os.path.join(DATA_DIR, "images", "subset", "images_all_15k", filename),
-        os.path.join(DATA_DIR, "images", "subset", "imageVectorDB", filename),
-        os.path.join(DATA_DIR, "images", "imageVectorDB", filename),
-    ]
-    for path in candidate_paths:
-        if os.path.exists(path):
-            return FileResponse(path)
-    raise HTTPException(status_code=404, detail=f"Image {filename} not found")
+    try:
+        presigned_url = s3_client.generate_presigned_url(
+            'get_object',
+            Params={'Bucket': S3_BUCKET, 'Key': f'images/fullset/VectorDB/{filename}'},
+            ExpiresIn=3600
+        )
+        return RedirectResponse(presigned_url)
+    except Exception as e:
+        raise HTTPException(status_code=404, detail=f"Image {filename} not found in S3")
 
 @app.get("/static/test_images/{filename}")
 def get_test_image(filename: str):
-    candidate_paths = [
-        "/tmp/local_custom_images/" + filename,
-        os.path.join(DATA_DIR, "images", "inference", filename),
-        os.path.join(DATA_DIR, "images", "fullset", "Test", filename),
-        os.path.join(DATA_DIR, "images", "subset", "imagesTest", filename),
-        os.path.join(DATA_DIR, "images", "imagesTest", filename),
-    ]
-    for path in candidate_paths:
-        if os.path.exists(path):
-            return FileResponse(path)
-    raise HTTPException(status_code=404, detail=f"Image {filename} not found")
+    # Prima controlla se è un'immagine custom caricata dall'utente localmente in /tmp
+    custom_path = "/tmp/local_custom_images/" + filename
+    if os.path.exists(custom_path):
+        return FileResponse(custom_path)
+        
+    try:
+        presigned_url = s3_client.generate_presigned_url(
+            'get_object',
+            Params={'Bucket': S3_BUCKET, 'Key': f'images/fullset/Test/{filename}'},
+            ExpiresIn=3600
+        )
+        return RedirectResponse(presigned_url)
+    except Exception as e:
+        raise HTTPException(status_code=404, detail=f"Image {filename} not found in S3")
 
 @app.get("/static/inference/{filename}")
 def get_inference_image(filename: str):

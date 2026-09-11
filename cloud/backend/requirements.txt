@@ -8,3 +8,4 @@ psycopg2-binary
 sqlmodel
 python-multipart
 dotenv
+boto3
