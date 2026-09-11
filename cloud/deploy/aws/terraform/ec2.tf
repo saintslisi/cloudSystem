@@ -36,6 +36,11 @@ resource "aws_instance" "k8s_master" {
     vpc_security_group_ids = [aws_security_group.k8s_nodes.id]
     key_name = aws_key_pair.k8s_key.key_name
 
+    root_block_device {
+        volume_size = 30
+        volume_type = "gp3"
+    }
+
     tags = {
         Name = "${var.project_name}-master"
         Role = "master"
@@ -51,6 +56,11 @@ resource "aws_instance" "k8s_worker_1"{
     vpc_security_group_ids = [aws_security_group.k8s_nodes.id]
     key_name = aws_key_pair.k8s_key.key_name
 
+    root_block_device {
+        volume_size = 30
+        volume_type = "gp3"
+    }
+
     tags = {
         Name = "${var.project_name}-worker-1"
     }
@@ -64,6 +74,11 @@ resource "aws_instance" "k8s_worker_2" {
     subnet_id = aws_subnet.private[1].id
     vpc_security_group_ids = [aws_security_group.k8s_nodes.id]
     key_name = aws_key_pair.k8s_key.key_name
+
+    root_block_device {
+        volume_size = 30
+        volume_type = "gp3"
+    }
 
     tags = {
         Name = "${var.project_name}-worker-2"

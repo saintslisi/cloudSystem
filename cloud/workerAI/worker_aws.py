@@ -449,6 +449,17 @@ def process_job(ch, method, properties, body):
                     if not found_img_path: # Prova anche PNG
                         found_img_path = next((os.path.join(d, f"{test_image_id}.png") for d in candidate_dirs if os.path.exists(os.path.join(d, f"{test_image_id}.png"))), None)
                     
+                    if not found_img_path:
+                        # Fallback to S3
+                        try:
+                            import boto3
+                            s3 = boto3.client('s3', region_name=os.getenv("AWS_DEFAULT_REGION", "eu-central-1"))
+                            tmp_path = f"/tmp/{test_image_id}.jpg"
+                            s3.download_file("sistemi-cloud-data-santi", f"images/fullset/Test/{test_image_id}.jpg", tmp_path)
+                            found_img_path = tmp_path
+                        except Exception as e:
+                            logging.warning(f"[{job_id}] S3 Fallback failed: {e}")
+                    
                     if found_img_path:
                         try:
                             import torchvision.transforms as T
