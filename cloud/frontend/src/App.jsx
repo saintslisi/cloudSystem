@@ -6,10 +6,18 @@ import './App.css';
 
 const getApiBaseUrl = () => {
   if (typeof window !== 'undefined') {
-    if (window.location.port === '5173') {
-      return `${window.location.protocol}//${window.location.hostname}:8000`;
+    // Se siamo su localhost (ambiente di sviluppo locale con Vite o Docker)
+    if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+      if (window.location.port === '5173') {
+        return `${window.location.protocol}//${window.location.hostname}:8000`; // Sviluppo Vite -> Backend FastAPI
+      }
+      return `${window.location.protocol}//${window.location.hostname}:30080`; // Docker Compose o NodePort
     }
-    return `${window.location.protocol}//${window.location.hostname}:30080`;
+    
+    // Se siamo su AWS (tramite ALB o IP pubblico del nodo)
+    // Usiamo lo stesso dominio/IP senza porta perché l'Ingress o l'ALB
+    // mappa le richieste su /api al backend direttamente sulla porta 80.
+    return `${window.location.protocol}//${window.location.hostname}`;
   }
   return 'http://localhost:8000';
 };
