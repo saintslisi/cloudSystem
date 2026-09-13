@@ -49,6 +49,21 @@ spec:
             secretKeyRef:
               name: aws-credentials
               key: AWS_SECRET_ACCESS_KEY
+        - name: CLUSTER_USER
+          valueFrom:
+            secretKeyRef:
+              name: hpc-credentials
+              key: CLUSTER_USER
+        - name: CLUSTER_HOST
+          valueFrom:
+            secretKeyRef:
+              name: hpc-credentials
+              key: CLUSTER_HOST
+        - name: CLUSTER_PW
+          valueFrom:
+            secretKeyRef:
+              name: hpc-credentials
+              key: CLUSTER_PW
         volumeMounts:
         - name: data-volume
           mountPath: /app/data
