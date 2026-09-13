@@ -2,8 +2,8 @@ import os
 import subprocess
 import time
 import re
+import logging
 from dotenv import load_dotenv
-
 load_dotenv()
 # =====================================================================
 # CONFIGURAZIONE CLUSTER SLURM (Modifica con i tuoi parametri)
