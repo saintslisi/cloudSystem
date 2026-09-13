@@ -7,13 +7,16 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DATA_DIR="$SCRIPT_DIR/../../data"
 KEY_FILE="$SCRIPT_DIR/terraform/k8s_key.pem"
+TEMP_KEY_FILE="/tmp/k8s_key_temp.pem"
 
 if [ ! -f "$KEY_FILE" ]; then
     echo "Errore: Chiave SSH $KEY_FILE non trovata. Esegui terraform apply prima."
     exit 1
 fi
 
-chmod 400 "$KEY_FILE"
+# Copia la chiave in /tmp per aggirare i problemi di permessi (es. NTFS/condivisioni)
+cp "$KEY_FILE" "$TEMP_KEY_FILE"
+chmod 400 "$TEMP_KEY_FILE"
 
 # Definisci i file strettamente necessari per far girare il frontend e il worker
 # Non carichiamo l'intero dataset da decine di GB!
@@ -41,13 +44,13 @@ sync_to_node() {
     echo "======================================"
 
     # Crea la directory di destinazione
-    ssh -i "$KEY_FILE" -o StrictHostKeyChecking=no ubuntu@$NODE_IP "sudo mkdir -p /app/data && sudo chown -R ubuntu:ubuntu /app/data"
+    ssh -i "$TEMP_KEY_FILE" -o StrictHostKeyChecking=no ubuntu@$NODE_IP "sudo mkdir -p /app/data && sudo chown -R ubuntu:ubuntu /app/data"
 
     for path in "${INCLUDES[@]}"; do
         if [ -d "$DATA_DIR/$path" ]; then
             echo "Sincronizzazione $path ..."
             # Usa rsync per trasferire solo i dati necessari
-            rsync -avz --progress -e "ssh -i $KEY_FILE -o StrictHostKeyChecking=no" "$DATA_DIR/$path" "ubuntu@$NODE_IP:/app/data/$path"
+            rsync -avz --progress -e "ssh -i $TEMP_KEY_FILE -o StrictHostKeyChecking=no" "$DATA_DIR/$path" "ubuntu@$NODE_IP:/app/data/$path"
         else
             echo "Avviso: $DATA_DIR/$path non trovato in locale. Salto."
         fi

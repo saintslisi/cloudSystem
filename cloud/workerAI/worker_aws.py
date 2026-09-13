@@ -434,8 +434,23 @@ def process_job(ch, method, properties, body):
     
     image_base64 = data.get("image_base64")
     filename = data.get("filename")
+    image_key = data.get("image_key")
     
-    if image_base64 and filename:
+    if image_key:
+        # Scarica l'immagine ottimizzata prodotta dalla Lambda
+        try:
+            import boto3
+            s3_client = boto3.client('s3', region_name=os.getenv("AWS_DEFAULT_REGION", "eu-central-1"))
+            bucket = "sistemi-cloud-data-santi"
+            
+            img_filename = image_key.split('/')[-1]
+            file_path = os.path.join("/tmp", img_filename)
+            s3_client.download_file(bucket, image_key, file_path)
+            logging.info(f"Scaricata immagine custom ottimizzata da S3: {image_key}")
+        except Exception as e:
+            logging.error(f"Errore download immagine {image_key} da S3: {e}")
+            file_path = None
+    elif image_base64 and filename:
         import base64
         file_path = os.path.join("/tmp", filename)
         try:

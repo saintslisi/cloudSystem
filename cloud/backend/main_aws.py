@@ -194,37 +194,42 @@ def init_db():
         db = Session(engine)
         if db.query(TestImage).count() == 0:
             images_to_insert = []
-            subset_dir = os.path.join(DATA_DIR, "images", "subset", "imagesTest")
-            fullset_dir = os.path.join(DATA_DIR, "images", "fullset", "Test")
             
-            # 1. Carica le prime 25 immagini dal subset
-            if os.path.exists(subset_dir) and os.path.isdir(subset_dir):
-                files = sorted([f for f in os.listdir(subset_dir) if f.lower().endswith(('.png', '.jpg', '.jpeg'))])
-                for f in files[:25]:
-                    img_id = os.path.splitext(f)[0]
-                    images_to_insert.append(TestImage(id=img_id, name=f"Subset {img_id}", filename=f))
-            
-            # 2. Carica le prime 25 immagini dal fullset (evitando ID duplicati se presenti)
-            if os.path.exists(fullset_dir) and os.path.isdir(fullset_dir):
-                files = sorted([f for f in os.listdir(fullset_dir) if f.lower().endswith(('.png', '.jpg', '.jpeg'))])
-                inserted = 0
-                for f in files:
-                    img_id = os.path.splitext(f)[0]
-                    if not any(x.id == img_id for x in images_to_insert):
-                        images_to_insert.append(TestImage(id=img_id, name=f"Fullset {img_id}", filename=f))
-                        inserted += 1
-                        if inserted >= 25:
-                            break
-                            
-            # Fallback se entrambe le cartelle falliscono, controlla cartella generica imagesTest
-            if not images_to_insert:
-                fallback_dir = os.path.join(DATA_DIR, "images", "imagesTest")
-                if os.path.exists(fallback_dir) and os.path.isdir(fallback_dir):
-                    files = sorted([f for f in os.listdir(fallback_dir) if f.lower().endswith(('.png', '.jpg', '.jpeg'))])
-                    for f in files[:50]:
-                        img_id = os.path.splitext(f)[0]
-                        images_to_insert.append(TestImage(id=img_id, name=f"Test {img_id}", filename=f))
-            
+            try:
+                import boto3
+                s3_client = boto3.client('s3', region_name=os.getenv("AWS_DEFAULT_REGION", "eu-central-1"))
+                bucket = "sistemi-cloud-data-santi"
+                
+                # 1. Carica dal fullset in S3
+                response = s3_client.list_objects_v2(Bucket=bucket, Prefix="images/fullset/Test/")
+                if 'Contents' in response:
+                    for obj in response['Contents']:
+                        key = obj['Key']
+                        if key.lower().endswith(('.png', '.jpg', '.jpeg')):
+                            filename = os.path.basename(key)
+                            img_id = os.path.splitext(filename)[0]
+                            if not any(x.id == img_id for x in images_to_insert):
+                                images_to_insert.append(TestImage(id=img_id, name=f"Fullset {img_id}", filename=filename))
+                                if len(images_to_insert) >= 25:
+                                    break
+                
+                # Se non c'è niente nel fullset, prova in fallback generico
+                if not images_to_insert:
+                    response = s3_client.list_objects_v2(Bucket=bucket, Prefix="images/imagesTest/")
+                    if 'Contents' in response:
+                        for obj in response['Contents']:
+                            key = obj['Key']
+                            if key.lower().endswith(('.png', '.jpg', '.jpeg')):
+                                filename = os.path.basename(key)
+                                img_id = os.path.splitext(filename)[0]
+                                images_to_insert.append(TestImage(id=img_id, name=f"Test {img_id}", filename=filename))
+                                if len(images_to_insert) >= 25:
+                                    break
+                                    
+            except Exception as e:
+                import logging
+                logging.error(f"Errore nel recupero delle immagini di test da S3: {e}")
+                
             if images_to_insert:
                 db.add_all(images_to_insert)
                 db.commit()
@@ -401,6 +406,29 @@ def search(
                 f_out.write(file_bytes)
                 
             image_base64 = base64.b64encode(file_bytes).decode('utf-8')
+            
+            # --- INTEGRAZIONE AWS LAMBDA ---
+            # Carichiamo l'immagine in images/raw/ su S3.
+            # Questo evento scatenerà automaticamente la Lambda Function che
+            # ottimizzerà l'immagine e scriverà in SQS il job!
+            import boto3
+            s3_client = boto3.client('s3', region_name=AWS_REGION)
+            bucket = "sistemi-cloud-data-santi" # O la env var S3_BUCKET
+            s3_key = f"images/raw/{unique_filename}"
+            s3_client.put_object(
+                Bucket=bucket,
+                Key=s3_key,
+                Body=file_bytes,
+                ContentType=file.content_type,
+                Metadata={
+                    'job_id': job_id,
+                    'training_set': str(training_set) if training_set else "fullset",
+                    'architecture': str(architecture) if architecture else "gcn",
+                    'vector_db_size': str(vector_db_size) if vector_db_size else "fullset"
+                }
+            )
+            logging.info(f"Immagine RAW caricata in S3 per la Lambda: {s3_key}")
+            
         except Exception as e:
             logging.error(f"Errore nella conversione/salvataggio dell'immagine: {str(e)}")
             raise HTTPException(status_code=500, detail="Failed to process uploaded file")
@@ -470,11 +498,17 @@ def search(
         "architecture": architecture,
         "vector_db_size": vector_db_size
     }
-    success = publish_to_queue(message)
-    if not success:
-        raise HTTPException(status_code=500, detail="Failed to queue job")
     
-    return {"job_id": job_id, "status": "PROCESSING", "message": "Job created and sent to the queue"}
+    # Se abbiamo caricato un'immagine custom, la Lambda si occuperà di accodare il Job.
+    # Altrimenti, se stiamo usando un'immagine già presente nella gallery (test_image_id),
+    # accodiamo il Job noi direttamente.
+    if file is None:
+        success = publish_to_queue(message)
+        if not success:
+            raise HTTPException(status_code=500, detail="Failed to queue job")
+        return {"job_id": job_id, "status": "PROCESSING", "message": "Job created and sent to the queue"}
+    else:
+        return {"job_id": job_id, "status": "PROCESSING", "message": "Immagine in fase di ottimizzazione (Lambda)..."}
 
 @app.get("/api/v1/status/{job_id}")
 def get_status(job_id: str):
