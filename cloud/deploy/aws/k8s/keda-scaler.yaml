@@ -1,0 +1,32 @@
+apiVersion: keda.sh/v1alpha1
+kind: TriggerAuthentication
+metadata:
+  name: aws-sqs-auth
+spec:
+  secretTargetRef:
+  - parameter: awsAccessKeyID
+    name: aws-credentials
+    key: AWS_ACCESS_KEY_ID
+  - parameter: awsSecretAccessKey
+    name: aws-credentials
+    key: AWS_SECRET_ACCESS_KEY
+---
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: worker-sqs-scaler
+spec:
+  scaleTargetRef:
+    name: worker
+  minReplicaCount: 1       # Tieniamo sempre almeno 1 worker attivo (puoi mettere 0 per risparmiare al massimo, ma il primo job sarà più lento)
+  maxReplicaCount: 10      # Numero massimo di pod del worker in parallelo
+  pollingInterval: 10      # KEDA controllerà la coda SQS ogni 10 secondi
+  cooldownPeriod:  60      # Tempo di attesa (secondi) prima di fare scale-down quando la coda è vuota
+  triggers:
+  - type: aws-sqs-queue
+    authenticationRef:
+      name: aws-sqs-auth
+    metadata:
+      queueURL: https://sqs.eu-central-1.amazonaws.com/235901778853/sistemi-cloud-ai-task-queue
+      queueLength: "5"     # KEDA spawnerà 1 pod aggiuntivo ogni 5 messaggi presenti in coda
+      awsRegion: "eu-central-1"
