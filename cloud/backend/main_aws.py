@@ -112,19 +112,29 @@ def get_graph(image_id: str):
     except Exception as e:
         logging.warning(f"Errore lettura JSON da Redis per {image_id}: {e}")
 
-    # Fallback su file
-    candidate_paths = [
-        os.path.join(DATA_DIR, "sceneGraph", "json", "inference", f"{image_id}.json"),
-        os.path.join(DATA_DIR, "sceneGraph", "json", "fullset", f"{image_id}.json"),
-        os.path.join(DATA_DIR, "sceneGraph", "json", "subset", f"{image_id}.json")
+    # Fallback su S3
+    candidate_keys = [
+        f"sceneGraph/json/inference/{image_id}.json",
+        f"sceneGraph/json/fullset/{image_id}.json",
+        f"sceneGraph/json/subset/{image_id}.json"
     ]
-    for path in candidate_paths:
-        if os.path.exists(path):
+    
+    try:
+        import boto3
+        s3_client = boto3.client('s3', region_name=os.getenv("AWS_DEFAULT_REGION", "eu-central-1"))
+        bucket = "sistemi-cloud-data-santi"
+        
+        for key in candidate_keys:
             try:
-                with open(path, 'r', encoding='utf-8') as f:
-                    return json.load(f)
+                response = s3_client.get_object(Bucket=bucket, Key=key)
+                json_data = response['Body'].read().decode('utf-8')
+                return json.loads(json_data)
+            except s3_client.exceptions.NoSuchKey:
+                continue
             except Exception as e:
-                logging.warning(f"Errore lettura file {path}: {e}")
+                logging.warning(f"Errore lettura S3 per {key}: {e}")
+    except Exception as e:
+        logging.error(f"Errore connessione S3: {e}")
                 
     raise HTTPException(status_code=404, detail=f"Graph JSON non trovato per {image_id}.")
 
@@ -143,22 +153,31 @@ def get_job_graph(job_id: str):
     except Exception as e:
         logging.warning(f"Errore lettura JSON da Redis per {job_id}: {e}")
 
-    # Fallback su file
-    candidate_paths = [
-        os.path.join(DATA_DIR, "sceneGraph", "json", "inference", f"{job_id}.json"),
-        os.path.join(DATA_DIR, "sceneGraph", "json", "fullset", f"{job_id}.json"),
-        os.path.join(DATA_DIR, "sceneGraph", "json", "subset", f"{job_id}.json"),
-        os.path.join(DATA_DIR, "sceneGraph", "json", "imagesTest", f"{job_id}.json")
+    # Fallback su S3
+    candidate_keys = [
+        f"sceneGraph/json/inference/{job_id}.json",
+        f"sceneGraph/json/fullset/{job_id}.json",
+        f"sceneGraph/json/subset/{job_id}.json",
+        f"sceneGraph/json/imagesTest/{job_id}.json"
     ]
     
-    for path in candidate_paths:
-        if os.path.exists(path):
+    try:
+        import boto3
+        s3_client = boto3.client('s3', region_name=os.getenv("AWS_DEFAULT_REGION", "eu-central-1"))
+        bucket = "sistemi-cloud-data-santi"
+        
+        for key in candidate_keys:
             try:
-                with open(path, 'r', encoding='utf-8') as f:
-                    return json.load(f)
+                response = s3_client.get_object(Bucket=bucket, Key=key)
+                json_data = response['Body'].read().decode('utf-8')
+                return json.loads(json_data)
+            except s3_client.exceptions.NoSuchKey:
+                continue
             except Exception as e:
-                raise HTTPException(status_code=500, detail=f"Error reading graph file: {e}")
-                
+                logging.warning(f"Errore lettura S3 per {key}: {e}")
+    except Exception as e:
+        logging.error(f"Errore connessione S3: {e}")
+
     raise HTTPException(status_code=404, detail="Graph not found for the given job/image ID")
 
 class TestImage(SQLModel, table=True):
