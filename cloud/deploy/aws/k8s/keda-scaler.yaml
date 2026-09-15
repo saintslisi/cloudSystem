@@ -28,5 +28,5 @@ spec:
       name: aws-sqs-auth
     metadata:
       queueURL: https://sqs.eu-central-1.amazonaws.com/235901778853/sistemi-cloud-ai-task-queue
-      queueLength: "5"     # KEDA spawnerà 1 pod aggiuntivo ogni 5 messaggi presenti in coda
+      queueLength: "1"     # KEDA spawnerà 1 pod aggiuntivo per ogni messaggio presente in coda
       awsRegion: "eu-central-1"

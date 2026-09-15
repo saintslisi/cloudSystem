@@ -597,20 +597,37 @@ def process_job(ch, method, properties, body):
             else:
                 graph = None
                 try:
-                    run_vlm_phase(job_id, os.path.basename(file_path))
-                    update_status(job_id, "SCENE_GRAPH")
-                    time.sleep(0.5)
-    
-                    update_status(job_id, "NOMIC_EMBEDDING")
-                    tmp_emb_pt = run_embedding_phase(job_id, os.path.basename(file_path))
-    
-                    if tmp_emb_pt and os.path.exists(tmp_emb_pt):
-                        graph = torch.load(tmp_emb_pt, map_location="cpu", weights_only=False)
-                    else:
-                        data_dir = get_data_dir()
-                        local_emb_pt = os.path.join(data_dir, "sceneGraph", "embedded", "inference", f"{job_id}.pt")
-                        if os.path.exists(local_emb_pt):
-                            graph = torch.load(local_emb_pt, map_location="cpu", weights_only=False)
+                    # Acquisizione del Distributed Lock per serializzare l'uso dell'HPC
+                    lock_key = "lock:hpc_gpu"
+                    lock_client = get_redis_client()
+                    acquired = False
+                    if lock_client:
+                        logging.info(f"[{job_id}] Attesa disponibilita HPC (Distributed Lock)...")
+                        while not lock_client.set(lock_key, job_id, nx=True, ex=3600):
+                            time.sleep(5)
+                        acquired = True
+                        logging.info(f"[{job_id}] Lock HPC acquisito! Inizio elaborazione esclusiva su cluster HPC.")
+                    
+                    try:
+                        run_vlm_phase(job_id, os.path.basename(file_path))
+                        update_status(job_id, "SCENE_GRAPH")
+                        time.sleep(0.5)
+        
+                        update_status(job_id, "NOMIC_EMBEDDING")
+                        tmp_emb_pt = run_embedding_phase(job_id, os.path.basename(file_path))
+        
+                        if tmp_emb_pt and os.path.exists(tmp_emb_pt):
+                            graph = torch.load(tmp_emb_pt, map_location="cpu", weights_only=False)
+                        else:
+                            data_dir = get_data_dir()
+                            local_emb_pt = os.path.join(data_dir, "sceneGraph", "embedded", "inference", f"{job_id}.pt")
+                            if os.path.exists(local_emb_pt):
+                                graph = torch.load(local_emb_pt, map_location="cpu", weights_only=False)
+                    finally:
+                        if acquired and lock_client:
+                            if lock_client.get(lock_key) == job_id:
+                                lock_client.delete(lock_key)
+                                logging.info(f"[{job_id}] Lock HPC rilasciato.")
                 except Exception as e:
                     logging.warning(f"[{job_id}] Orchestratore HPC / VLM in remoto non connesso ({e}). Attivo fallback resiliente per l'immagine custom.")
     
