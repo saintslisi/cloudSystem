@@ -1,0 +1,131 @@
+name: Master CI/CD Pipeline
+
+on:
+  workflow_dispatch: # Questo permette a deploy_cloud.sh di avviarlo manualmente
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  # ==========================================
+  # FASE 1: PROVISIONING INFRASTRUTTURA CON ANSIBLE
+  # ==========================================
+  provision-cluster:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Ansible
+        run: sudo apt-get update && sudo apt-get install -y ansible
+
+      - name: Esegui Ansible Playbook
+        env:
+          ANSIBLE_HOST_KEY_CHECKING: "False"
+        run: |
+          cd cloud/deploy/aws/ansible
+          
+          # Ripristina la chiave SSH dal secret GitHub per collegarsi alle EC2
+          echo "${{ secrets.EC2_SSH_KEY }}" > k8s_key.pem
+          chmod 600 k8s_key.pem
+          
+          # Lancia il bootstrap del cluster K3s
+          ansible-playbook -i inventory/hosts.ini setup_k8s_cluster.yml --private-key k8s_key.pem
+
+  # ==========================================
+  # FASE 2: PREPARAZIONE SECRETS HPC SU KUBERNETES
+  # ==========================================
+  inject-secrets:
+    needs: provision-cluster
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Inject HPC Secrets to EC2 Master
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ubuntu
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            # Questo script viene eseguito direttamente sul Master Node di Kubernetes
+            echo "Iniettando i secret HPC nel cluster..."
+            
+            # Cancelliamo il secret se esiste già
+            kubectl delete secret hpc-credentials --ignore-not-found
+            
+            # Creiamo il secret prendendo le variabili direttamente dai GitHub Secrets
+            kubectl create secret generic hpc-credentials \
+              --from-literal=CLUSTER_USER='${{ secrets.HPC_CLUSTER_USER }}' \
+              --from-literal=CLUSTER_HOST='${{ secrets.HPC_CLUSTER_HOST }}' \
+              --from-literal=CLUSTER_PW='${{ secrets.HPC_CLUSTER_PW }}'
+              
+            echo "Secret HPC iniettato con successo!"
+
+  # ==========================================
+  # FASE 3: BUILD IMMAGINI E DEPLOY KUBERNETES
+  # ==========================================
+  build-and-deploy:
+    needs: inject-secrets
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Log in to the Container registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Build dei microservizi
+      - name: Build and push Backend image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./cloud/backend
+          push: true
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/backend:latest
+
+      - name: Build and push Frontend image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./cloud/frontend
+          push: true
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/frontend:latest
+
+      - name: Build and push Worker image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./
+          file: ./cloud/workerAI/Dockerfile
+          push: true
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/worker:latest
+
+      # Deploy
+      - name: Copy K8s Manifests to EC2
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          scp -o StrictHostKeyChecking=no -i ~/.ssh/id_rsa -r cloud/deploy/aws/k8s ubuntu@${{ secrets.EC2_HOST }}:~/app/cloud/deploy/aws/
+
+      - name: Apply K8s Manifests
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ubuntu
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            cd ~/app/cloud/deploy/aws/k8s
+            
+            # Applica i deployment e i service
+            kubectl apply -f .
+            
+            # Riavvia i pod per fargli scaricare le immagini appena buildate
+            kubectl rollout restart deployment backend frontend worker
