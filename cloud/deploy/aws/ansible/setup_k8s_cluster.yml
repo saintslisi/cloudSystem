@@ -169,7 +169,7 @@
       shell: |
         helm repo add kedacore https://kedacore.github.io/charts
         helm repo update
-        helm install keda kedacore/keda --namespace keda --create-namespace
+        helm upgrade --install keda kedacore/keda --namespace keda --create-namespace
 
     - name: Genera il comando di join per i worker
       command: kubeadm token create --print-join-command
