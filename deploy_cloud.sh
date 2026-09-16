@@ -107,3 +107,10 @@ echo -e "${GREEN}   TUTTO INIZIATO CON SUCCESSO!               ${NC}"
 echo -e "${GREEN}   Controlla la repository GitHub per vedere  ${NC}"
 echo -e "${GREEN}   lo stato del deployment!                   ${NC}"
 echo -e "${GREEN}==============================================${NC}"
+
+cd cloud/deploy/aws/terraform
+WEBSITE_URL=$(terraform output -raw website_url 2>/dev/null)
+echo -e ""
+echo -e "${YELLOW}👉 URL SITO WEB:${NC} ${GREEN}$WEBSITE_URL${NC}"
+echo -e "${YELLOW}(Attendi ~3 minuti che la GitHub Action finisca il deploy su Kubernetes prima di collegarti!)${NC}"
+echo -e ""
