@@ -93,6 +93,7 @@ jobs:
           context: ./cloud/backend
           push: true
           tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/backend:latest
+          provenance: false
 
       - name: Build and push Frontend image
         uses: docker/build-push-action@v5
@@ -100,6 +101,7 @@ jobs:
           context: ./cloud/frontend
           push: true
           tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/frontend:latest
+          provenance: false
 
       - name: Build and push Worker image
         uses: docker/build-push-action@v5
@@ -108,6 +110,7 @@ jobs:
           file: ./cloud/workerAI/Dockerfile
           push: true
           tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/worker:latest
+          provenance: false
 
       # Deploy
       - name: Copy K8s Manifests to EC2
