@@ -64,7 +64,13 @@ jobs:
               --from-literal=CLUSTER_HOST='${{ secrets.HPC_CLUSTER_HOST }}' \
               --from-literal=CLUSTER_PW='${{ secrets.HPC_CLUSTER_PW }}'
               
-            echo "Secret HPC iniettato con successo!"
+            # Creiamo il secret per AWS
+            kubectl delete secret aws-credentials --ignore-not-found
+            kubectl create secret generic aws-credentials \
+              --from-literal=AWS_ACCESS_KEY_ID='${{ secrets.AWS_ACCESS_KEY_ID }}' \
+              --from-literal=AWS_SECRET_ACCESS_KEY='${{ secrets.AWS_SECRET_ACCESS_KEY }}'
+              
+            echo "Secret HPC e AWS iniettati con successo!"
 
   # ==========================================
   # FASE 3: BUILD IMMAGINI E DEPLOY KUBERNETES
