@@ -27,11 +27,13 @@ jobs:
           cd cloud/deploy/aws/ansible
           
           # Ripristina la chiave SSH dal secret GitHub per collegarsi alle EC2
-          echo "${{ secrets.EC2_SSH_KEY }}" > k8s_key.pem
-          chmod 600 k8s_key.pem
+          # (salvandola in ../terraform come si aspetta il file hosts.ini)
+          mkdir -p ../terraform
+          echo "${{ secrets.EC2_SSH_KEY }}" > ../terraform/k8s_key.pem
+          chmod 600 ../terraform/k8s_key.pem
           
           # Lancia il bootstrap del cluster K3s
-          ansible-playbook -i inventory/hosts.ini setup_k8s_cluster.yml --private-key k8s_key.pem
+          ansible-playbook -i inventory/hosts.ini setup_k8s_cluster.yml --private-key ../terraform/k8s_key.pem
 
   # ==========================================
   # FASE 2: PREPARAZIONE SECRETS HPC SU KUBERNETES
