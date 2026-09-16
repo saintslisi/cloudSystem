@@ -54,6 +54,14 @@ gh secret set HPC_CLUSTER_USER --body "$CLUSTER_USER" --repo $GITHUB_REPO_NAME
 gh secret set HPC_CLUSTER_HOST --body "$CLUSTER_HOST" --repo $GITHUB_REPO_NAME
 gh secret set HPC_CLUSTER_PW --body "$CLUSTER_PW" --repo $GITHUB_REPO_NAME
 
+# Recupero chiavi AWS se non settate nell'ambiente
+if [ -z "$AWS_ACCESS_KEY_ID" ]; then
+    AWS_ACCESS_KEY_ID=$(aws configure get aws_access_key_id)
+fi
+if [ -z "$AWS_SECRET_ACCESS_KEY" ]; then
+    AWS_SECRET_ACCESS_KEY=$(aws configure get aws_secret_access_key)
+fi
+
 # Setup credenziali AWS per il Backend
 gh secret set AWS_ACCESS_KEY_ID --body "$AWS_ACCESS_KEY_ID" --repo $GITHUB_REPO_NAME
 gh secret set AWS_SECRET_ACCESS_KEY --body "$AWS_SECRET_ACCESS_KEY" --repo $GITHUB_REPO_NAME
