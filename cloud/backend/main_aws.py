@@ -112,6 +112,20 @@ def get_graph(image_id: str):
     except Exception as e:
         logging.warning(f"Errore lettura JSON da Redis per {image_id}: {e}")
 
+    # Fallback su file (EFS)
+    candidate_paths = [
+        os.path.join(DATA_DIR, "sceneGraph", "json", "inference", f"{image_id}.json"),
+        os.path.join(DATA_DIR, "sceneGraph", "json", "fullset", f"{image_id}.json"),
+        os.path.join(DATA_DIR, "sceneGraph", "json", "subset", f"{image_id}.json")
+    ]
+    for path in candidate_paths:
+        if os.path.exists(path):
+            try:
+                with open(path, 'r', encoding='utf-8') as f:
+                    return json.load(f)
+            except Exception as e:
+                logging.warning(f"Errore lettura file {path}: {e}")
+
     # Fallback su S3
     candidate_keys = [
         f"sceneGraph/json/inference/{image_id}.json",
@@ -152,6 +166,21 @@ def get_job_graph(job_id: str):
                 return json.loads(graph_data)
     except Exception as e:
         logging.warning(f"Errore lettura JSON da Redis per {job_id}: {e}")
+
+    # Fallback su file (EFS)
+    candidate_paths = [
+        os.path.join(DATA_DIR, "sceneGraph", "json", "inference", f"{job_id}.json"),
+        os.path.join(DATA_DIR, "sceneGraph", "json", "fullset", f"{job_id}.json"),
+        os.path.join(DATA_DIR, "sceneGraph", "json", "subset", f"{job_id}.json"),
+        os.path.join(DATA_DIR, "sceneGraph", "json", "imagesTest", f"{job_id}.json")
+    ]
+    for path in candidate_paths:
+        if os.path.exists(path):
+            try:
+                with open(path, 'r', encoding='utf-8') as f:
+                    return json.load(f)
+            except Exception as e:
+                logging.warning(f"Errore lettura file {path}: {e}")
 
     # Fallback su S3
     candidate_keys = [
