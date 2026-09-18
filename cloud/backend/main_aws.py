@@ -166,9 +166,9 @@ def get_graph(image_id: str):
 @app.get("/api/v1/job/{job_id}/graph")
 def get_job_graph(job_id: str):
     """
-    Ritorna il JSON del grafo generato per un determinato job o immagine di test.
+    Ritorna la struttura del grafo generato per un determinato job o immagine di test.
     """
-    # Prova a leggere da Redis prima (per evitare problemi di FUSE/NTFS)
+    # 1. Prova a leggere da Redis
     try:
         r = get_redis_client()
         if r:
@@ -176,62 +176,49 @@ def get_job_graph(job_id: str):
             if graph_data:
                 return json.loads(graph_data)
     except Exception as e:
-        logging.warning(f"Errore lettura JSON da Redis per {job_id}: {e}")
+        logging.warning(f"Errore lettura Redis per job {job_id}: {e}")
 
-    # Fallback su file (EFS)
-    candidate_paths = [
-        os.path.join(DATA_DIR, "sceneGraph", "json", "inference", f"{job_id}.json"),
-        os.path.join(DATA_DIR, "sceneGraph", "json", "fullset", f"{job_id}.json"),
-        os.path.join(DATA_DIR, "sceneGraph", "json", "subset", f"{job_id}.json"),
-        os.path.join(DATA_DIR, "sceneGraph", "json", "imagesTest", f"{job_id}.json")
+    # 2. Se è una custom image uploadata o inferita, cerca tra i file .pt salvati
+    pt_files = [
+        os.path.join(DATA_DIR, "sceneGraph", "embedded", "inference", f"{job_id}.pt"),
+        os.path.join(DATA_DIR, "sceneGraph", "fullset", "semantic", "raw", "test_queries_scene_graphs.pt"),
+        os.path.join(DATA_DIR, "sceneGraph", "fullset", "semantic", "raw", "test_gallery_scene_graphs.pt")
     ]
-    for path in candidate_paths:
-        if os.path.exists(path):
+    
+    import torch
+    for pt_path in pt_files:
+        if os.path.exists(pt_path):
             try:
-                with open(path, 'r', encoding='utf-8') as f:
-                    return json.load(f)
-            except Exception as e:
-                logging.warning(f"Errore lettura file {path}: {e}")
+                content = torch.load(pt_path, map_location="cpu", weights_only=False)
+                graphs = content if isinstance(content, list) else [content]
+                for graph in graphs:
+                    g_id = str(getattr(graph, 'image_id', '')).strip()
+                    if g_id == str(job_id) or not isinstance(content, list):
+                        graph_json = {
+                            "nodes": [{"id": str(i), "label": text} for i, text in enumerate(getattr(graph, 'node_text', []))],
+                            "edges": []
+                        }
+                        if hasattr(graph, 'edge_index') and graph.edge_index is not None and graph.edge_index.numel() > 0:
+                            edge_index = graph.edge_index.tolist()
+                            edge_text = getattr(graph, 'edge_text', [])
+                            for i in range(len(edge_index[0])):
+                                graph_json["edges"].append({
+                                    "source": str(edge_index[0][i]),
+                                    "target": str(edge_index[1][i]),
+                                    "label": edge_text[i] if i < len(edge_text) else ""
+                                })
+                        
+                        try:
+                            r = get_redis_client()
+                            if r:
+                                r.set(f"graph_json:{job_id}", json.dumps(graph_json), ex=86400)
+                        except Exception:
+                            pass
+                        return graph_json
+            except Exception as pt_err:
+                logging.error(f"Errore lettura PT per job {job_id}: {pt_err}")
 
-    # Fallback finale: ricerca dinamica nel dataset .pt della gallery se non ancora pre-esportato
-    try:
-        gallery_pt = os.path.join(DATA_DIR, "sceneGraph", "fullset", "semantic", "raw", "test_gallery_scene_graphs.pt")
-        if not os.path.exists(gallery_pt):
-            import boto3
-            s3_client = boto3.client('s3', region_name=os.getenv("AWS_DEFAULT_REGION", "eu-central-1"))
-            s3_client.download_file("sistemi-cloud-data-santi", "sceneGraph/fullset/semantic/raw/test_gallery_scene_graphs.pt", gallery_pt)
-        
-        if os.path.exists(gallery_pt):
-            import torch
-            graphs = torch.load(gallery_pt, map_location="cpu", weights_only=False)
-            for graph in graphs:
-                g_id = str(getattr(graph, 'image_id', '')).strip()
-                if g_id == str(image_id):
-                    graph_json = {
-                        "nodes": [{"id": str(i), "label": text} for i, text in enumerate(getattr(graph, 'node_text', []))],
-                        "edges": []
-                    }
-                    if hasattr(graph, 'edge_index') and graph.edge_index is not None and graph.edge_index.numel() > 0:
-                        edge_index = graph.edge_index.tolist()
-                        edge_text = getattr(graph, 'edge_text', [])
-                        for i in range(len(edge_index[0])):
-                            graph_json["edges"].append({
-                                "source": str(edge_index[0][i]),
-                                "target": str(edge_index[1][i]),
-                                "label": edge_text[i] if i < len(edge_text) else ""
-                            })
-                    # Salva in Redis per non dover riricercare
-                    try:
-                        r = get_redis_client()
-                        if r:
-                            r.set(f"graph_json:{image_id}", json.dumps(graph_json), ex=86400)
-                    except Exception:
-                        pass
-                    return graph_json
-    except Exception as dyn_err:
-        logging.error(f"Errore caricamento dinamico grafo da PT: {dyn_err}")
-
-    raise HTTPException(status_code=404, detail="Graph not found for the given job/image ID")
+    raise HTTPException(status_code=404, detail=f"Grafo non trovato per job/image {job_id}.")
 
 class TestImage(SQLModel, table=True):
     id: str = Field(primary_key=True)
