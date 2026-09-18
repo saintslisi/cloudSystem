@@ -182,30 +182,43 @@ def get_job_graph(job_id: str):
             except Exception as e:
                 logging.warning(f"Errore lettura file {path}: {e}")
 
-    # Fallback su S3
-    candidate_keys = [
-        f"sceneGraph/json/inference/{job_id}.json",
-        f"sceneGraph/json/fullset/{job_id}.json",
-        f"sceneGraph/json/subset/{job_id}.json",
-        f"sceneGraph/json/imagesTest/{job_id}.json"
-    ]
-    
+    # Fallback finale: ricerca dinamica nel dataset .pt della gallery se non ancora pre-esportato
     try:
-        import boto3
-        s3_client = boto3.client('s3', region_name=os.getenv("AWS_DEFAULT_REGION", "eu-central-1"))
-        bucket = "sistemi-cloud-data-santi"
+        gallery_pt = os.path.join(DATA_DIR, "sceneGraph", "fullset", "semantic", "raw", "test_gallery_scene_graphs.pt")
+        if not os.path.exists(gallery_pt):
+            import boto3
+            s3_client = boto3.client('s3', region_name=os.getenv("AWS_DEFAULT_REGION", "eu-central-1"))
+            s3_client.download_file("sistemi-cloud-data-santi", "sceneGraph/fullset/semantic/raw/test_gallery_scene_graphs.pt", gallery_pt)
         
-        for key in candidate_keys:
-            try:
-                response = s3_client.get_object(Bucket=bucket, Key=key)
-                json_data = response['Body'].read().decode('utf-8')
-                return json.loads(json_data)
-            except s3_client.exceptions.NoSuchKey:
-                continue
-            except Exception as e:
-                logging.warning(f"Errore lettura S3 per {key}: {e}")
-    except Exception as e:
-        logging.error(f"Errore connessione S3: {e}")
+        if os.path.exists(gallery_pt):
+            import torch
+            graphs = torch.load(gallery_pt, map_location="cpu", weights_only=False)
+            for graph in graphs:
+                g_id = str(getattr(graph, 'image_id', '')).strip()
+                if g_id == str(image_id):
+                    graph_json = {
+                        "nodes": [{"id": str(i), "label": text} for i, text in enumerate(getattr(graph, 'node_text', []))],
+                        "edges": []
+                    }
+                    if hasattr(graph, 'edge_index') and graph.edge_index is not None and graph.edge_index.numel() > 0:
+                        edge_index = graph.edge_index.tolist()
+                        edge_text = getattr(graph, 'edge_text', [])
+                        for i in range(len(edge_index[0])):
+                            graph_json["edges"].append({
+                                "source": str(edge_index[0][i]),
+                                "target": str(edge_index[1][i]),
+                                "label": edge_text[i] if i < len(edge_text) else ""
+                            })
+                    # Salva in Redis per non dover riricercare
+                    try:
+                        r = get_redis_client()
+                        if r:
+                            r.set(f"graph_json:{image_id}", json.dumps(graph_json), ex=86400)
+                    except Exception:
+                        pass
+                    return graph_json
+    except Exception as dyn_err:
+        logging.error(f"Errore caricamento dinamico grafo da PT: {dyn_err}")
 
     raise HTTPException(status_code=404, detail="Graph not found for the given job/image ID")
 
