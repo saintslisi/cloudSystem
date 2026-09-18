@@ -72,3 +72,6 @@ similarity_examples/
 *.tar
 *.pem
 kubeconfig
+
+project_config.env
+

@@ -86,6 +86,15 @@ if [ -n "$LOCAL_DATA_DIR" ]; then
     
     echo "Sincronizzazione Immagini per il VectorDB (VectorDB)..."
     aws s3 sync "$LOCAL_DATA_DIR/images/fullset/VectorDB" "s3://$AWS_S3_BUCKET_NAME/images/fullset/VectorDB" --exclude "*.gitkeep"
+    
+    echo "Sincronizzazione Test Queries Scene Graphs (.pt)..."
+    aws s3 cp "$LOCAL_DATA_DIR/sceneGraph/fullset/semantic/embedded/test_queries_scene_graphs.pt" "s3://$AWS_S3_BUCKET_NAME/sceneGraph/fullset/semantic/embedded/test_queries_scene_graphs.pt"
+    
+    echo "Sincronizzazione Test Gallery Scene Graphs (.pt) [Embeddings]..."
+    
+    echo "Sincronizzazione Scene Graphs Raw (.pt)..."
+    aws s3 cp "$LOCAL_DATA_DIR/sceneGraph/fullset/semantic/raw/test_queries_scene_graphs.pt" "s3://$AWS_S3_BUCKET_NAME/sceneGraph/fullset/semantic/raw/test_queries_scene_graphs.pt"
+    aws s3 cp "$LOCAL_DATA_DIR/sceneGraph/fullset/semantic/raw/test_gallery_scene_graphs.pt" "s3://$AWS_S3_BUCKET_NAME/sceneGraph/fullset/semantic/raw/test_gallery_scene_graphs.pt"
 else
     echo -e "${RED}[WARNING] LOCAL_DATA_DIR non impostato, salto S3 sync.${NC}"
 fi

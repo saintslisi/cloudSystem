@@ -22,8 +22,6 @@ chmod 400 "$TEMP_KEY_FILE"
 # Non carichiamo l'intero dataset da decine di GB!
 INCLUDES=(
     "models/fullset/"
-    "models/subset/"
-    "images/subset/"
     "images/imagesTest/"
     "sceneGraph/json/"
 )
