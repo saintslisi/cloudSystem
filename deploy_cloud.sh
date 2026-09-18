@@ -92,6 +92,9 @@ if [ -n "$LOCAL_DATA_DIR" ]; then
     
     echo "Sincronizzazione Test Gallery Scene Graphs (.pt) [Embeddings]..."
     
+    echo "Sincronizzazione JSON (Grafi per Frontend)..."
+    aws s3 sync "$LOCAL_DATA_DIR/sceneGraph/json" "s3://$AWS_S3_BUCKET_NAME/sceneGraph/json" --exclude "*.gitkeep"
+
     echo "Sincronizzazione Scene Graphs Raw (.pt)..."
     aws s3 cp "$LOCAL_DATA_DIR/sceneGraph/fullset/semantic/raw/test_queries_scene_graphs.pt" "s3://$AWS_S3_BUCKET_NAME/sceneGraph/fullset/semantic/raw/test_queries_scene_graphs.pt"
     aws s3 cp "$LOCAL_DATA_DIR/sceneGraph/fullset/semantic/raw/test_gallery_scene_graphs.pt" "s3://$AWS_S3_BUCKET_NAME/sceneGraph/fullset/semantic/raw/test_gallery_scene_graphs.pt"
