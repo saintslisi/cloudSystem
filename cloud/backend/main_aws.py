@@ -102,7 +102,7 @@ def get_inference_image(filename: str):
 
 @app.get("/api/v1/graph/{image_id}")
 def get_graph(image_id: str):
-    # 1. Prova prima a leggere da Redis (se già letto/calcolato)
+    # Prova a leggere da Redis prima (per evitare problemi di FUSE/NTFS)
     try:
         r = get_redis_client()
         if r:
@@ -110,65 +110,40 @@ def get_graph(image_id: str):
             if graph_data:
                 return json.loads(graph_data)
     except Exception as e:
-        logging.warning(f"Errore lettura Redis per {image_id}: {e}")
+        logging.warning(f"Errore lettura JSON da Redis per {image_id}: {e}")
 
-    # 2. Lettura DIRETTAMENTE DAI FILE .pt (Queries e Gallery)
-    pt_files = [
-        os.path.join(DATA_DIR, "sceneGraph", "fullset", "semantic", "raw", "test_queries_scene_graphs.pt"),
-        os.path.join(DATA_DIR, "sceneGraph", "fullset", "semantic", "raw", "test_gallery_scene_graphs.pt")
+    # Fallback su S3
+    candidate_keys = [
+        f"sceneGraph/json/inference/{image_id}.json",
+        f"sceneGraph/json/fullset/{image_id}.json",
+        f"sceneGraph/json/subset/{image_id}.json"
     ]
     
-    import torch
-    for pt_path in pt_files:
-        if not os.path.exists(pt_path):
+    try:
+        import boto3
+        s3_client = boto3.client('s3', region_name=os.getenv("AWS_DEFAULT_REGION", "eu-central-1"))
+        bucket = "sistemi-cloud-data-santi"
+        
+        for key in candidate_keys:
             try:
-                import boto3
-                s3_client = boto3.client('s3', region_name=os.getenv("AWS_DEFAULT_REGION", "eu-central-1"))
-                rel_s3_key = os.path.relpath(pt_path, DATA_DIR)
-                os.makedirs(os.path.dirname(pt_path), exist_ok=True)
-                s3_client.download_file("sistemi-cloud-data-santi", rel_s3_key, pt_path)
-            except Exception as download_err:
-                logging.warning(f"Download s3 fallito per {pt_path}: {download_err}")
-
-        if os.path.exists(pt_path):
-            try:
-                graphs = torch.load(pt_path, map_location="cpu", weights_only=False)
-                for graph in graphs:
-                    g_id = str(getattr(graph, 'image_id', '')).strip()
-                    if g_id == str(image_id):
-                        graph_json = {
-                            "nodes": [{"id": str(i), "label": text} for i, text in enumerate(getattr(graph, 'node_text', []))],
-                            "edges": []
-                        }
-                        if hasattr(graph, 'edge_index') and graph.edge_index is not None and graph.edge_index.numel() > 0:
-                            edge_index = graph.edge_index.tolist()
-                            edge_text = getattr(graph, 'edge_text', [])
-                            for i in range(len(edge_index[0])):
-                                graph_json["edges"].append({
-                                    "source": str(edge_index[0][i]),
-                                    "target": str(edge_index[1][i]),
-                                    "label": edge_text[i] if i < len(edge_text) else ""
-                                })
-                        
-                        # Salva in Redis per le successive chiamate veloci
-                        try:
-                            r = get_redis_client()
-                            if r:
-                                r.set(f"graph_json:{image_id}", json.dumps(graph_json), ex=86400)
-                        except Exception:
-                            pass
-                        return graph_json
-            except Exception as pt_err:
-                logging.error(f"Errore lettura da file .pt {pt_path}: {pt_err}")
-
-    raise HTTPException(status_code=404, detail=f"Grafo non trovato nel file .pt per ID {image_id}.")
+                response = s3_client.get_object(Bucket=bucket, Key=key)
+                json_data = response['Body'].read().decode('utf-8')
+                return json.loads(json_data)
+            except s3_client.exceptions.NoSuchKey:
+                continue
+            except Exception as e:
+                logging.warning(f"Errore lettura S3 per {key}: {e}")
+    except Exception as e:
+        logging.error(f"Errore connessione S3: {e}")
+                
+    raise HTTPException(status_code=404, detail=f"Graph JSON non trovato per {image_id}.")
 
 @app.get("/api/v1/job/{job_id}/graph")
 def get_job_graph(job_id: str):
     """
-    Ritorna la struttura del grafo generato per un determinato job o immagine di test.
+    Ritorna il JSON del grafo generato per un determinato job o immagine di test.
     """
-    # 1. Prova a leggere da Redis
+    # Prova a leggere da Redis prima (per evitare problemi di FUSE/NTFS)
     try:
         r = get_redis_client()
         if r:
@@ -176,49 +151,34 @@ def get_job_graph(job_id: str):
             if graph_data:
                 return json.loads(graph_data)
     except Exception as e:
-        logging.warning(f"Errore lettura Redis per job {job_id}: {e}")
+        logging.warning(f"Errore lettura JSON da Redis per {job_id}: {e}")
 
-    # 2. Se è una custom image uploadata o inferita, cerca tra i file .pt salvati
-    pt_files = [
-        os.path.join(DATA_DIR, "sceneGraph", "embedded", "inference", f"{job_id}.pt"),
-        os.path.join(DATA_DIR, "sceneGraph", "fullset", "semantic", "raw", "test_queries_scene_graphs.pt"),
-        os.path.join(DATA_DIR, "sceneGraph", "fullset", "semantic", "raw", "test_gallery_scene_graphs.pt")
+    # Fallback su S3
+    candidate_keys = [
+        f"sceneGraph/json/inference/{job_id}.json",
+        f"sceneGraph/json/fullset/{job_id}.json",
+        f"sceneGraph/json/subset/{job_id}.json",
+        f"sceneGraph/json/imagesTest/{job_id}.json"
     ]
     
-    import torch
-    for pt_path in pt_files:
-        if os.path.exists(pt_path):
+    try:
+        import boto3
+        s3_client = boto3.client('s3', region_name=os.getenv("AWS_DEFAULT_REGION", "eu-central-1"))
+        bucket = "sistemi-cloud-data-santi"
+        
+        for key in candidate_keys:
             try:
-                content = torch.load(pt_path, map_location="cpu", weights_only=False)
-                graphs = content if isinstance(content, list) else [content]
-                for graph in graphs:
-                    g_id = str(getattr(graph, 'image_id', '')).strip()
-                    if g_id == str(job_id) or not isinstance(content, list):
-                        graph_json = {
-                            "nodes": [{"id": str(i), "label": text} for i, text in enumerate(getattr(graph, 'node_text', []))],
-                            "edges": []
-                        }
-                        if hasattr(graph, 'edge_index') and graph.edge_index is not None and graph.edge_index.numel() > 0:
-                            edge_index = graph.edge_index.tolist()
-                            edge_text = getattr(graph, 'edge_text', [])
-                            for i in range(len(edge_index[0])):
-                                graph_json["edges"].append({
-                                    "source": str(edge_index[0][i]),
-                                    "target": str(edge_index[1][i]),
-                                    "label": edge_text[i] if i < len(edge_text) else ""
-                                })
-                        
-                        try:
-                            r = get_redis_client()
-                            if r:
-                                r.set(f"graph_json:{job_id}", json.dumps(graph_json), ex=86400)
-                        except Exception:
-                            pass
-                        return graph_json
-            except Exception as pt_err:
-                logging.error(f"Errore lettura PT per job {job_id}: {pt_err}")
+                response = s3_client.get_object(Bucket=bucket, Key=key)
+                json_data = response['Body'].read().decode('utf-8')
+                return json.loads(json_data)
+            except s3_client.exceptions.NoSuchKey:
+                continue
+            except Exception as e:
+                logging.warning(f"Errore lettura S3 per {key}: {e}")
+    except Exception as e:
+        logging.error(f"Errore connessione S3: {e}")
 
-    raise HTTPException(status_code=404, detail=f"Grafo non trovato per job/image {job_id}.")
+    raise HTTPException(status_code=404, detail="Graph not found for the given job/image ID")
 
 class TestImage(SQLModel, table=True):
     id: str = Field(primary_key=True)
