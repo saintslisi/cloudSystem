@@ -35,8 +35,8 @@ cat <<EOF > inventory/hosts.ini
 $MASTER_IP ansible_user=ubuntu ansible_ssh_common_args='-o StrictHostKeyChecking=no -o ServerAliveInterval=60' private_ip=$MASTER_PRIV_IP
 
 [workers]
-$WORKER1_IP ansible_user=ubuntu ansible_ssh_common_args='-o StrictHostKeyChecking=no -o ServerAliveInterval=60 -o ProxyCommand="ssh -W %h:%p -q ubuntu@$MASTER_IP -i ../terraform/k8s_key.pem -o StrictHostKeyChecking=no -o ServerAliveInterval=60"'
-$WORKER2_IP ansible_user=ubuntu ansible_ssh_common_args='-o StrictHostKeyChecking=no -o ServerAliveInterval=60 -o ProxyCommand="ssh -W %h:%p -q ubuntu@$MASTER_IP -i ../terraform/k8s_key.pem -o StrictHostKeyChecking=no -o ServerAliveInterval=60"'
+$WORKER1_IP ansible_user=ubuntu ansible_ssh_common_args='-o StrictHostKeyChecking=no -o ServerAliveInterval=60'
+$WORKER2_IP ansible_user=ubuntu ansible_ssh_common_args='-o StrictHostKeyChecking=no -o ServerAliveInterval=60'
 
 [k3s_cluster:children]
 master
