@@ -906,8 +906,7 @@ def check_and_export_test_gallery_json():
         logging.info("Exporting test queries and gallery graphs to JSON for frontend comparison...")
         
         paths_to_process = [
-            os.path.join(get_data_dir(), "sceneGraph", "fullset", "semantic", "raw", "test_queries_scene_graphs.pt"),
-            os.path.join(get_data_dir(), "sceneGraph", "fullset", "semantic", "raw", "test_gallery_scene_graphs.pt")
+            os.path.join(get_data_dir(), "sceneGraph", "fullset", "semantic", "raw", "test_queries_scene_graphs.pt")
         ]
         
         for p in paths_to_process:
