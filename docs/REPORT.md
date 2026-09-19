@@ -245,6 +245,16 @@ archi). I coefficienti più alti vanno a *Hair* (0,093), *Surfboard* (0,087), *A
 indica dove si concentra il segnale ma non stabilisce una gerarchia netta fra quei nodi.
 Grafico in `figures/explainability_graph.png`.
 
+### 7.3 Infrastruttura Cloud e Deployment
+
+Il sistema è stato sottoposto a un deployment cloud-native su AWS, orchestrato interamente tramite Terraform e script Bash per garantire riproducibilità e Continuous Integration. L'infrastruttura di base sfrutta un cluster Kubernetes (K3s) su istanze EC2, bilanciato da un Application Load Balancer (ALB), con persistenza su RDS (PostgreSQL) e Redis.
+
+Durante la fase di messa in produzione, è emersa una criticità hardware legata al caricamento della galleria dei grafi: il file tensoriale grezzo (`test_gallery_scene_graphs.pt`) pesa oltre 1.1 GB. Il caricamento in RAM tramite `torch.load()` richiedeva oltre 3 GB di memoria scompattata, portando sistematicamente in Out-Of-Memory (OOM) le istanze EC2 di classe `t3.small` (limitate a 2 GB di RAM) e causando un crash irreversibile dell'applicativo (502 Bad Gateway). 
+
+Per risolvere il problema, si è tentato inizialmente uno scale-up verticale passando alle istanze `t3.medium` (4 GB di RAM). Tuttavia, questa soluzione è stata bloccata dalle restrizioni dell'account AWS Free Tier (`FreeTierRestrictionError`), che non consentiva il provisioning di tale classe di macchine. La soluzione definitiva è consistita nell'ottimizzare architetturalmente la pipeline dei dati: il caricamento pesante dei tensori è stato rimosso dai pod applicativi. Al suo posto, un job preparatorio locale esporta i grafi necessari sotto forma di leggeri file JSON (uno per immagine), che vengono sincronizzati su un bucket S3. Il backend interroga direttamente il bucket S3 per recuperare la topologia del grafo su richiesta, abbattendo drasticamente il footprint di memoria e garantendo stabilità sulle macchine `t3.small`.
+
+La gestione del traffico per l'inferenza AI è stata inoltre ottimizzata introducendo l'autoscaling dinamico tramite KEDA (Kubernetes Event-driven Autoscaling). KEDA monitora la lunghezza di una coda SQS dedicata ai job di AI e scala automaticamente il deployment dei worker in base al carico (da un minimo di 1 pod a un massimo di 10), permettendo di smaltire efficientemente i picchi di richieste senza mantenere risorse inutilizzate.
+
 ## 8. Limiti e sviluppi futuri
 
 **Circolarità parziale della ground truth.** Il criterio di somiglianza è rule-based e
