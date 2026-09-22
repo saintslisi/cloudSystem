@@ -50,9 +50,18 @@ echo "✅ k3s-worker-2 creato!"
 
 echo "🔗 Montaggio della cartella data in k3s-worker-1 e k3s-worker-2..."
 if [ -d "$DATA_PATH" ]; then
-    $MULTIPASS_CMD mount "$DATA_PATH" k3s-worker-1:/app/data
-    $MULTIPASS_CMD mount "$DATA_PATH" k3s-worker-2:/app/data
-    echo "✅ Cartella montata con successo in entrambi i worker!"
+    # Il mount usa il plugin multipass-sshfs scaricato dallo Snap Store.
+    # Se il CDN di Canonical è temporaneamente irraggiungibile (errore 502/503),
+    # il mount fallisce ma il cluster K3s funziona comunque. Procediamo senza bloccare.
+    if $MULTIPASS_CMD mount "$DATA_PATH" k3s-worker-1:/app/data 2>&1 && \
+       $MULTIPASS_CMD mount "$DATA_PATH" k3s-worker-2:/app/data 2>&1; then
+        echo "✅ Cartella montata con successo in entrambi i worker!"
+    else
+        echo "⚠️  Mount fallito (probabile disservizio Snap CDN). Il cluster continuerà a funzionare."
+        echo "    Per montare manualmente in seguito esegui:"
+        echo "    multipass mount $(realpath $DATA_PATH) k3s-worker-1:/app/data"
+        echo "    multipass mount $(realpath $DATA_PATH) k3s-worker-2:/app/data"
+    fi
 else
     echo "⚠️ ATTENZIONE: La cartella $DATA_PATH non esiste. Creala e montala manualmente."
 fi
