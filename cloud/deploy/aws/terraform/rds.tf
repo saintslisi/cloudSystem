@@ -41,7 +41,7 @@ resource "aws_db_instance" "postgres" {
     storage_type = "gp2"
     db_name = "gcndatabase"
     username = "dbadmin"
-    password = "SuperSecretPassword123!"
+    password = var.db_password
     skip_final_snapshot = true
     publicly_accessible = false
     db_subnet_group_name = aws_db_subnet_group.rds_subnet_group.name

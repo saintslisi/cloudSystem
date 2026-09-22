@@ -1,7 +1,8 @@
 #!/bin/bash
 set -e
 
-DATA_DIR="/media/santi/Shared3/utenti/santi/universita/Magistrale/I anno/II Semestre/Deep Learning/Progetto/data"
+# Percorso relativo per evitare percorsi assoluti hardcoded nel repository
+DATA_DIR="../Deep Learning/Progetto/data"
 BUCKET="s3://sistemi-cloud-data-santi"
 
 echo "=========================================================="
