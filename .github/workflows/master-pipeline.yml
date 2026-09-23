@@ -141,3 +141,7 @@ jobs:
             
             # Riavvia i pod per fargli scaricare le immagini appena buildate
             kubectl rollout restart deployment backend frontend worker
+            
+            # Attendi che il backend sia pronto e inizializza il database vuoto
+            kubectl rollout status deployment/backend --timeout=120s
+            kubectl exec deployment/backend -- python -c "from main import init_db; init_db()" || echo "Inizializzazione DB fallita o già eseguita"
