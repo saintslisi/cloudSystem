@@ -15,9 +15,6 @@ spec:
       - name: frontend
         image: ghcr.io/saintslisi/cloudsystem/frontend:latest
         imagePullPolicy: Always
-        env:
-        - name: VITE_API_URL
-          value: "http://sistemi-cloud-alb-726861933.eu-central-1.elb.amazonaws.com"
         ports:
         - containerPort: 5173
 ---
