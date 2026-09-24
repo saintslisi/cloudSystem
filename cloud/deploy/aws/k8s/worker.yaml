@@ -22,7 +22,7 @@ spec:
         - name: POSTGRES_USER
           value: "dbadmin"
         - name: POSTGRES_PASSWORD
-          value: "SuperSecretPassword123!"
+          value: "password"
         - name: POSTGRES_DB
           value: "gcndatabase"
         - name: POSTGRES_HOST
