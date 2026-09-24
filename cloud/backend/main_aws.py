@@ -219,53 +219,54 @@ def init_db():
                 logging.error(f"Errore init DB: {e}")
                 return
         
-        # Inizializziamo dei dati finti per testare il frontend
-        db = Session(engine)
-        if db.query(TestImage).count() == 0:
-            images_to_insert = []
+    try:
+            # Inizializziamo dei dati finti per testare il frontend
+            db = Session(engine)
+            if db.query(TestImage).count() == 0:
+                images_to_insert = []
             
-            try:
-                import boto3
-                s3_client = boto3.client('s3', region_name=os.getenv("AWS_DEFAULT_REGION", "eu-central-1"))
-                bucket = "sistemi-cloud-data-santi"
+                try:
+                    import boto3
+                    s3_client = boto3.client('s3', region_name=os.getenv("AWS_DEFAULT_REGION", "eu-central-1"))
+                    bucket = "sistemi-cloud-data-santi"
                 
-                # 1. Carica dal fullset in S3
-                response = s3_client.list_objects_v2(Bucket=bucket, Prefix="images/fullset/Test/")
-                if 'Contents' in response:
-                    for obj in response['Contents']:
-                        key = obj['Key']
-                        if key.lower().endswith(('.png', '.jpg', '.jpeg')):
-                            filename = os.path.basename(key)
-                            img_id = os.path.splitext(filename)[0]
-                            if not any(x.id == img_id for x in images_to_insert):
-                                images_to_insert.append(TestImage(id=img_id, name=f"Fullset {img_id}", filename=filename))
-                                if len(images_to_insert) >= 25:
-                                    break
-                
-                # Se non c'è niente nel fullset, prova in fallback generico
-                if not images_to_insert:
-                    response = s3_client.list_objects_v2(Bucket=bucket, Prefix="images/imagesTest/")
+                    # 1. Carica dal fullset in S3
+                    response = s3_client.list_objects_v2(Bucket=bucket, Prefix="images/fullset/Test/")
                     if 'Contents' in response:
                         for obj in response['Contents']:
                             key = obj['Key']
                             if key.lower().endswith(('.png', '.jpg', '.jpeg')):
                                 filename = os.path.basename(key)
                                 img_id = os.path.splitext(filename)[0]
-                                images_to_insert.append(TestImage(id=img_id, name=f"Test {img_id}", filename=filename))
-                                if len(images_to_insert) >= 25:
-                                    break
-                                    
-            except Exception as e:
-                import logging
-                logging.error(f"Errore nel recupero delle immagini di test da S3: {e}")
+                                if not any(x.id == img_id for x in images_to_insert):
+                                    images_to_insert.append(TestImage(id=img_id, name=f"Fullset {img_id}", filename=filename))
+                                    if len(images_to_insert) >= 25:
+                                        break
                 
-            if images_to_insert:
-                db.add_all(images_to_insert)
-                db.commit()
-                logging.info(f"{len(images_to_insert)} Immagini di test inserite con successo nel database Postgres!")
-            else:
-                logging.warning("Nessuna immagine trovata per inizializzare il DB.")
-        db.close()
+                    # Se non c'è niente nel fullset, prova in fallback generico
+                    if not images_to_insert:
+                        response = s3_client.list_objects_v2(Bucket=bucket, Prefix="images/imagesTest/")
+                        if 'Contents' in response:
+                            for obj in response['Contents']:
+                                key = obj['Key']
+                                if key.lower().endswith(('.png', '.jpg', '.jpeg')):
+                                    filename = os.path.basename(key)
+                                    img_id = os.path.splitext(filename)[0]
+                                    images_to_insert.append(TestImage(id=img_id, name=f"Test {img_id}", filename=filename))
+                                    if len(images_to_insert) >= 25:
+                                        break
+                                    
+                except Exception as e:
+                    import logging
+                    logging.error(f"Errore nel recupero delle immagini di test da S3: {e}")
+                
+                if images_to_insert:
+                    db.add_all(images_to_insert)
+                    db.commit()
+                    logging.info(f"{len(images_to_insert)} Immagini di test inserite con successo nel database Postgres!")
+                else:
+                    logging.warning("Nessuna immagine trovata per inizializzare il DB.")
+            db.close()
     except Exception as e:
         logging.error(f"Errore init DB: {str(e)}")
 
