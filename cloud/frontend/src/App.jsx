@@ -5,6 +5,11 @@ import './App.css';
 
 
 const getApiBaseUrl = () => {
+  // Vite inserisce le variabili d'ambiente in import.meta.env
+  if (import.meta.env && import.meta.env.VITE_API_URL) {
+    return import.meta.env.VITE_API_URL;
+  }
+
   if (typeof window !== 'undefined') {
     // Se siamo su localhost (ambiente di sviluppo locale con Vite o Docker)
     if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
@@ -219,9 +224,19 @@ function App() {
         if (currentStatus === 'COMPLETED') {
           setJobStatus('COMPLETED');
           const resResults = await fetch(`${API_BASE_URL}/api/v1/results/${jobId}`);
-          const resultsData = await resResults.json();
-          setResults(resultsData);
-          setSelectedResultIndex(0);
+          if (resResults.ok) {
+            const resultsData = await resResults.json();
+            if (Array.isArray(resultsData) && resultsData.length > 0) {
+              setResults(resultsData);
+              setSelectedResultIndex(0);
+            } else {
+              setJobStatus('FAILED');
+              setErrorMessage("Il backend non ha restituito risultati validi.");
+            }
+          } else {
+            setJobStatus('FAILED');
+            setErrorMessage("Errore nel recupero dei risultati completati.");
+          }
         } else if (currentStatus === 'FAILED') {
           setJobStatus('FAILED');
           setErrorMessage("L'elaborazione del job è fallita.");

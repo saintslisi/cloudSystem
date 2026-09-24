@@ -206,8 +206,18 @@ engine = create_engine(DATABASE_URL)
 
 @app.on_event("startup")
 def init_db():
-    try:        
-        SQLModel.metadata.create_all(engine)
+    import time
+    for attempt in range(15):
+        try:        
+            SQLModel.metadata.create_all(engine)
+            break
+        except Exception as e:
+            if attempt < 14:
+                logging.warning(f"Postgres non ancora pronto, attesa (tentativo {attempt+1}/15)...: {e}")
+                time.sleep(2)
+            else:
+                logging.error(f"Errore init DB: {e}")
+                return
         
         # Inizializziamo dei dati finti per testare il frontend
         db = Session(engine)
@@ -558,18 +568,31 @@ def get_status(job_id: str):
 
 @app.get("/api/v1/results/{job_id}")
 def get_results(job_id: str):
+    import json
     
+    # Check Redis first as it's updated immediately by the worker
+    r = get_redis_client()
+    if r:
+        job_redis = r.hgetall(job_id)
+        if job_redis and job_redis.get("status") == "COMPLETED" and job_redis.get("result"):
+            result_str = job_redis.get("result")
+            try:
+                return json.loads(result_str)
+            except Exception:
+                pass
+                
     db = Session(engine)
     job = db.get(Job, job_id)
     if job is None:
+        db.close()
         raise HTTPException(status_code=404, detail="Job not found")
     if job.status != "COMPLETED":
+        db.close()
         raise HTTPException(status_code=400, detail="Job not completed yet")
     
     result = job.result
     db.close()
     
-    import json
     if result and isinstance(result, str):
         try:
             return json.loads(result)
