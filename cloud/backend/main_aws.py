@@ -257,7 +257,6 @@ def init_db():
                                         break
                                     
                 except Exception as e:
-                    import logging
                     logging.error(f"Errore nel recupero delle immagini di test da S3: {e}")
                 
                 if images_to_insert:
