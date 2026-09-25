@@ -89,7 +89,7 @@ def get_inference_image(filename: str):
 
 @app.get("/api/v1/graph/{image_id}")
 def get_graph(image_id: str):
-    # Prova a leggere da Redis prima (per evitare problemi di FUSE/NTFS)
+    # Try reading from Redis first (avoid FUSE/NTFS issues)
     try:
         r = get_redis_client()
         if r:
@@ -99,7 +99,7 @@ def get_graph(image_id: str):
     except Exception as e:
         logging.warning(f"Errore lettura JSON da Redis per {image_id}: {e}")
 
-    # Fallback su file
+    # Fallback to file
     candidate_paths = [
         os.path.join(DATA_DIR, "sceneGraph", "json", "inference", f"{image_id}.json"),
         os.path.join(DATA_DIR, "sceneGraph", "json", "fullset", f"{image_id}.json"),
@@ -120,7 +120,7 @@ def get_job_graph(job_id: str):
     """
     Ritorna il JSON del grafo generato per un determinato job o immagine di test.
     """
-    # Prova a leggere da Redis prima (per evitare problemi di FUSE/NTFS)
+    # Try reading from Redis first (avoid FUSE/NTFS issues)
     try:
         r = get_redis_client()
         if r:
@@ -130,7 +130,7 @@ def get_job_graph(job_id: str):
     except Exception as e:
         logging.warning(f"Errore lettura JSON da Redis per {job_id}: {e}")
 
-    # Fallback su file
+    # Fallback to file
     candidate_paths = [
         os.path.join(DATA_DIR, "sceneGraph", "json", "inference", f"{job_id}.json"),
         os.path.join(DATA_DIR, "sceneGraph", "json", "fullset", f"{job_id}.json"),
@@ -188,21 +188,21 @@ def init_db():
                 return
         
     try:
-        # Inizializziamo dei dati finti per testare il frontend
+        # Initialize mock data to test frontend
         db = Session(engine)
         if db.query(TestImage).count() == 0:
             images_to_insert = []
             subset_dir = os.path.join(DATA_DIR, "images", "subset", "imagesTest")
             fullset_dir = os.path.join(DATA_DIR, "images", "fullset", "Test")
             
-            # 1. Carica le prime 25 immagini dal subset
+            # 1. Load first 25 images from subset
             if os.path.exists(subset_dir) and os.path.isdir(subset_dir):
                 files = sorted([f for f in os.listdir(subset_dir) if f.lower().endswith(('.png', '.jpg', '.jpeg'))])
                 for f in files[:25]:
                     img_id = os.path.splitext(f)[0]
                     images_to_insert.append(TestImage(id=img_id, name=f"Subset {img_id}", filename=f))
             
-            # 2. Carica le prime 25 immagini dal fullset (evitando ID duplicati se presenti)
+            # 2. Load first 25 images from fullset (avoid duplicate IDs)
             if os.path.exists(fullset_dir) and os.path.isdir(fullset_dir):
                 files = sorted([f for f in os.listdir(fullset_dir) if f.lower().endswith(('.png', '.jpg', '.jpeg'))])
                 inserted = 0
@@ -214,7 +214,7 @@ def init_db():
                         if inserted >= 25:
                             break
                             
-            # Fallback se entrambe le cartelle falliscono, controlla cartella generica imagesTest
+            # Fallback if both fail, check generic imagesTest folder
             if not images_to_insert:
                 fallback_dir = os.path.join(DATA_DIR, "images", "imagesTest")
                 if os.path.exists(fallback_dir) and os.path.isdir(fallback_dir):
@@ -292,7 +292,7 @@ def delete_custom_test_image(image_id: str):
         db.close()
         raise HTTPException(status_code=404, detail="Immagine custom non trovata")
     
-    # Rimuovi file associato se esiste
+    # Remove associated file if it exists
     custom_dir = "/tmp/local_custom_images"
     if img.filename:
         file_path = os.path.join(custom_dir, img.filename)
@@ -310,13 +310,13 @@ def delete_custom_test_image(image_id: str):
 @app.post("/api/v1/save-custom-image/{job_id}")
 def save_custom_image(job_id: str):
     db = Session(engine)
-    # Controlla se esiste già
+    # Check if already exists
     existing = db.query(CustomTestImage).filter(CustomTestImage.id == job_id).first()
     if existing:
         db.close()
         return {"message": "Immagine già salvata nel sistema"}
 
-    # Cerca il file immagine salvato durante l'inferenza
+    # Search image file saved during inference
     inference_dir = "/tmp/local_inference_images"
     filename = None
     if os.path.exists(inference_dir):
@@ -369,7 +369,7 @@ def search(
     use_cache: Optional[str] = Form("true")
     ):
     
-    # Parsing manuale del booleano
+    # Manual boolean parsing
     is_cache_enabled = str(use_cache).lower() in ["true", "1", "yes"]
     if file is None and test_image_id is None and graph_json is None:
         raise HTTPException(status_code=400, detail="Missing file, test_image_id or graph_json")
@@ -386,7 +386,7 @@ def search(
                 ext = ".png"
             unique_filename = f"{job_id}{ext}"
             
-            # Save locally for serving later (since exFAT mount is read-only)
+            # Save locally for serving later (exFAT mount is read-only)
             local_inference_dir = "/tmp/local_inference_images"
             os.makedirs(local_inference_dir, exist_ok=True)
             local_path = os.path.join(local_inference_dir, unique_filename)
@@ -401,7 +401,7 @@ def search(
             logging.error(f"Errore nella conversione/salvataggio dell'immagine: {str(e)}")
             raise HTTPException(status_code=500, detail="Failed to process uploaded file")
 
-    # Controllo cache
+    # Check cache
     if is_cache_enabled and test_image_id is not None:
         r = get_redis_client()
         result_json = None
@@ -439,7 +439,7 @@ def search(
             
             return {"job_id": job_id, "status": "COMPLETED", "cached": True}
 
-    # Se non c'è in cache, mettiamo in coda
+    # Queue if not in cache
     db = Session(engine)
     job = Job(job_id=job_id)
     db.add(job)
@@ -474,7 +474,7 @@ def search(
 
 @app.get("/api/v1/status/{job_id}")
 def get_status(job_id: str):
-    #cerco su Redis
+    # search on Redis
     r = get_redis_client()
     if r is None:
         raise HTTPException(status_code=500, detail="Redis connection failed")
@@ -483,13 +483,13 @@ def get_status(job_id: str):
     if job:
         return {"job":job, "message": "Job found in Redis"}
 
-    #Cerco su Postgres
+    # search on Postgres
     db = Session(engine)
     job = db.get(Job, job_id)
     if job is None:
         raise HTTPException(status_code=404, detail="Job not found")
 
-    #Aggiorno Redis con lo stato attuale preso da Postgres
+    # update Redis with Postgres state
     job_to_store : dict = {"job_id":job.job_id,"status":job.status,"result":job.result if job.result else ""}
     r.hset(job_id, mapping=job_to_store)
     r.expire(job_id, 3600)

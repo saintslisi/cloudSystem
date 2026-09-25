@@ -185,7 +185,7 @@ def load_gcn_model(training_set, architecture):
             model.load_state_dict(ckpt["model_state"])
             model.eval().to(device)
             GCN_MODELS[cache_key] = model
-            logging.info(f"✅ Modello GCN caricato con successo in RAM! ({cache_key})")
+            logging.info(f"[OK] GCN model successfully loaded into RAM! ({cache_key})")
             return model
         except Exception as e:
             logging.error(f"Errore caricamento GCN: {e}")
@@ -301,7 +301,7 @@ def loadTestEmbeddings(test_image_id: str, training_set: str, vector_db_size: st
 
         data_dir = get_data_dir()
         
-        # Fallback su file se non trovato in Redis
+        # Fallback to file se non trovato in Redis
         inference_pt_path = os.path.join(data_dir, "sceneGraph", "embedded", "inference", f"{test_image_id}.pt")
         if os.path.exists(inference_pt_path) and not architecture.startswith("vision_"):
             logging.info(f"Caricato grafo/embedding custom da inference: {inference_pt_path}")
@@ -383,7 +383,7 @@ def loadTestEmbeddings(test_image_id: str, training_set: str, vector_db_size: st
                         except Exception as e:
                             logging.error(f"Errore caricamento fallback nativo: {e}")
                 
-                # Cerca nella gallery come fallback
+                # Search gallery as fallback
                 gallery = load_gallery_data(training_set, vector_db_size, architecture)
                 if gallery and 'image_ids' in gallery:
                     try:
@@ -396,7 +396,7 @@ def loadTestEmbeddings(test_image_id: str, training_set: str, vector_db_size: st
                 
                 if not architecture.startswith("vision_"):
                     logging.warning(f"ID {test_image_id} non trovato nel dataset corrente, cerco nei file di fallback storici...")
-                    # FALLBACK STORICO PER GCN (immagini UI che non sono state aggiornate nei nuovi split fullset)
+                    # HISTORICAL GCN FALLBACK (UI images not updated in new fullset splits)
                     old_paths = [
                         os.path.join(data_dir, "sceneGraph", "subset", "embedded", "class_rel", "test_queries_scene_graphs.pt"),
                         os.path.join(data_dir, "sceneGraph", "fullset", "semantic", "embedded", "test_queries_scene_graphs.pt"),
@@ -488,7 +488,7 @@ def process_job(ch, method, properties, body):
                         os.path.join(get_data_dir(), "images", "imagesTest")
                     ]
                     found_img_path = next((os.path.join(d, f"{test_image_id}.jpg") for d in candidate_dirs if os.path.exists(os.path.join(d, f"{test_image_id}.jpg"))), None)
-                    if not found_img_path: # Prova anche PNG
+                    if not found_img_path: # Try PNG as well
                         found_img_path = next((os.path.join(d, f"{test_image_id}.png") for d in candidate_dirs if os.path.exists(os.path.join(d, f"{test_image_id}.png"))), None)
                     
                     if not found_img_path:
@@ -540,7 +540,7 @@ def process_job(ch, method, properties, body):
                     graph = test_data
                     if graph is None:
                         logging.warning(f"[{job_id}] Impossibile recuperare embedding pre-calcolato per {test_image_id} in {training_set}. Cerco il grafo per estrazione dinamica...")
-                        # Cerca il grafo nei vari dataset
+                        # Search for graph in datasets
                         data_dir = get_data_dir()
                         candidate_graphs_paths = [
                             os.path.join(data_dir, "sceneGraph", "subset", "semantic", "embedded", "test_queries_scene_graphs.pt"),
@@ -582,7 +582,7 @@ def process_job(ch, method, properties, body):
                     os.system(f"cp {tmp_pt} {output_path}")
                     logging.info(f"[{job_id}] Grafo embedded salvato in {output_path}")
                     
-                    # Salva anche su Redis per bypassare errori exFAT
+                    # Save on Redis to bypass exFAT errors
                     try:
                         import io, redis
                         r_bin = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, decode_responses=False)
@@ -600,7 +600,7 @@ def process_job(ch, method, properties, body):
             
             if is_vision_baseline:
                 logging.info(f"[{job_id}] Modello {architecture} è Baseline. Estrazione embeddings diretta (bypass VLM)...")
-                # Estrazione diretta via Baseline CNN
+                # Direct extraction via Baseline CNN
                 try:
                     import torchvision.transforms as T
                     from PIL import Image
@@ -632,7 +632,7 @@ def process_job(ch, method, properties, body):
                         query_vector = model(img_tensor).cpu()
                     logging.info(f"[{job_id}] Vector estratto con Baseline Vision ({architecture})!")
                     
-                    # Salva su Redis
+                    # Save on Redis
                     try:
                         import io, redis
                         r_bin = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, decode_responses=False)
@@ -649,7 +649,7 @@ def process_job(ch, method, properties, body):
             else:
                 graph = None
                 try:
-                    # Acquisizione del Distributed Lock per serializzare l'uso dell'HPC
+                    # Acquire Distributed Lock to serialize HPC usage
                     lock_key = "lock:hpc_gpu"
                     lock_client = get_redis_client()
                     acquired = False
@@ -723,14 +723,14 @@ def process_job(ch, method, properties, body):
                 os.system(f"cp {tmp_pt} {output_path}")
                 logging.info(f"[{job_id}] Grafo per immagine caricata salvato in {output_path}")
                 
-                # Salva anche su Redis per bypassare errori exFAT
+                # Save on Redis to bypass exFAT errors
                 try:
                     import io, redis
                     r_bin = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, decode_responses=False)
                     buffer = io.BytesIO()
                     torch.save(graph, buffer)
                     r_bin.set(f"graph_pt:{job_id}", buffer.getvalue())
-                    r_bin.expire(f"graph_pt:{job_id}", 86400) # 1 giorno
+                    r_bin.expire(f"graph_pt:{job_id}", 86400) # 1 day
                     logging.info(f"[{job_id}] Grafo salvato con successo in Redis (graph_pt:{job_id})")
                 except Exception as re_err:
                     logging.error(f"[{job_id}] Errore salvataggio grafo in Redis: {re_err}")
@@ -738,7 +738,7 @@ def process_job(ch, method, properties, body):
                 time.sleep(0.5)
 
         # -------------------------------------------------------------
-        # Estrazione Graph JSON per Visualizzazione Frontend
+        # Extract Graph JSON for Frontend Visualization
         # -------------------------------------------------------------
         if not is_vision_baseline and graph is not None:
             try:
@@ -755,7 +755,7 @@ def process_job(ch, method, properties, body):
                             "target": str(edge_index[1][i]),
                             "label": edge_text[i] if i < len(edge_text) else ""
                         })
-                # Il target ID è quello effettivo dell'immagine per permettere il recupero dal DB/Frontend
+                # Target ID is the actual image ID to allow DB/Frontend retrieval
                 target_id = test_image_id if test_image_id else job_id
                 data_dir = get_data_dir()
                 json_dir = os.path.join(data_dir, "sceneGraph", "json", "inference")
@@ -767,12 +767,12 @@ def process_job(ch, method, properties, body):
                 except Exception as file_err:
                     logging.warning(f"[{job_id}] Impossibile salvare JSON su file (ignorato): {file_err}")
                 
-                # Salva su Redis per il frontend!
+                # Save on Redis for frontend!
                 try:
                     r = get_redis_client()
                     if r:
                         r.set(f"graph_json:{job_id}", json.dumps(graph_json))
-                        # Imposta una scadenza per pulizia automatica (1 ora)
+                        # Set expiration for automatic cleanup (1 hour)
                         r.expire(f"graph_json:{job_id}", 3600)
                 except Exception as redis_err:
                     logging.error(f"[{job_id}] Errore salvataggio JSON su Redis: {redis_err}")
@@ -800,7 +800,7 @@ def process_job(ch, method, properties, body):
                     query_vector = gcn_model(graph_x, graph_edge_index, None, edge_attr).cpu()
                 logging.info(f"[{job_id}] Scene Embedding estratto con successo! Dimensione: {query_vector.shape}")
                 
-                # Salva su Redis per futuri riutilizzi del custom image
+                # Save on Redis for custom image reuse
                 try:
                     import io, redis
                     r_bin = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, decode_responses=False)
@@ -816,7 +816,7 @@ def process_job(ch, method, properties, body):
                 query_vector = torch.randn(1, 256)
 
         # -------------------------------------------------------------
-        # STEP VECTOR SEARCH: Ricerca di Similarità reale (FullSet Gallery)
+        # STEP VECTOR SEARCH: Real Similarity Search (FullSet Gallery)
         # -------------------------------------------------------------
         update_status(job_id, "VECTOR_SEARCH")
         logging.info(f"[{job_id}] Ricerca similarità vettoriale su DB Gallery ({vector_db_size})...")
@@ -833,7 +833,7 @@ def process_job(ch, method, properties, body):
             image_ids = gallery.get("image_ids")
 
             if faiss_index is not None:
-                # Usa l'indice FAISS
+                # Use FAISS index
                 import faiss
                 import numpy as np
                 q_np = query_vector.numpy()
@@ -842,7 +842,7 @@ def process_job(ch, method, properties, body):
                 top_scores = top_scores_np[0].tolist()
                 top_indices = top_indices_np[0].tolist()
             else:
-                # Usa similarità coseno manuale (PyTorch) se non c'è indice FAISS
+                # Use manual cosine similarity (PyTorch) if no FAISS index
                 if isinstance(gallery_emb, torch.Tensor):
                     import torch.nn.functional as F
                     query_norm = F.normalize(query_vector, p=2, dim=1)
@@ -901,7 +901,7 @@ def check_and_export_test_gallery_json():
     json_dir = os.path.join(get_data_dir(), "sceneGraph", "json", "fullset")
     os.makedirs(json_dir, exist_ok=True)
     
-    # Se ci sono meno di 15000 file, vuol dire che manca la gallery (che ne ha 20k)
+    # If less than 15000 files, gallery is missing (has 20k)
     if len(os.listdir(json_dir)) < 15000:
         logging.info("Exporting test queries and gallery graphs to JSON for frontend comparison...")
         
@@ -922,7 +922,7 @@ def check_and_export_test_gallery_json():
                         
                         json_path = os.path.join(json_dir, f"{image_id}.json")
                         if os.path.exists(json_path):
-                            continue # Evita di riscrivere se già presente
+                            continue # Avoid rewriting if already present
                         
                         graph_json = {
                             "nodes": [{"id": str(i), "label": text} for i, text in enumerate(getattr(graph, 'node_text', []))],
@@ -959,7 +959,7 @@ class MockMethod:
         self.delivery_tag = tag
 
 def start_worker():
-    # Prima di avviare il worker, prepariamo i JSON per il frontend
+    # Prepare frontend JSON before starting worker
     check_and_export_test_gallery_json()
     
     import boto3

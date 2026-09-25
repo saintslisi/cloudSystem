@@ -1,14 +1,14 @@
 #!/bin/bash
 
-# Questo script inietta i Secret (AWS e HPC) nel cluster K8s in Cloud usando il kubeconfig locale.
-# Da lanciare SOLO DOPO aver eseguito "terraform apply" e "ansible-playbook setup_k8s_cluster.yml".
+# This script injects Secrets (AWS and HPC) into the K8s cluster on Cloud using the local kubeconfig.
+# To be run ONLY AFTER running "terraform apply" and "ansible-playbook setup_k8s_cluster.yml".
 
-echo "Caricamento variabili (per HPC)..."
-# Le carichiamo da .env (assumendo che sia nella root del progetto o in cloud/)
+echo "[*] Loading variables (for HPC)..."
+# Loaded from .env (assuming it's in the project root or in cloud/)
 source ../../.env 2>/dev/null || source ../../../.env 2>/dev/null
 
-echo "Configurazione AWS Credentials Secret..."
-# Qui usiamo le credenziali AWS già configurate nel tuo ambiente locale
+echo "[*] Configuring AWS Credentials Secret..."
+# Using the AWS credentials already configured in your local environment
 export AWS_ACCESS_KEY_ID=$(aws configure get default.aws_access_key_id)
 export AWS_SECRET_ACCESS_KEY=$(aws configure get default.aws_secret_access_key)
 
@@ -17,12 +17,12 @@ kubectl --kubeconfig=kubeconfig create secret generic aws-credentials \
   --from-literal=AWS_ACCESS_KEY_ID="${AWS_ACCESS_KEY_ID}" \
   --from-literal=AWS_SECRET_ACCESS_KEY="${AWS_SECRET_ACCESS_KEY}"
 
-echo "Configurazione HPC Credentials Secret..."
-# IMPORTANTE: la password per HPC presa dal .env
+echo "[*] Configuring HPC Credentials Secret..."
+# IMPORTANT: HPC password taken from .env
 kubectl --kubeconfig=kubeconfig delete secret hpc-credentials --ignore-not-found
 kubectl --kubeconfig=kubeconfig create secret generic hpc-credentials \
   --from-literal=CLUSTER_USER="${CLUSTER_USER}" \
   --from-literal=CLUSTER_HOST="${CLUSTER_HOST}" \
   --from-literal=CLUSTER_PW="${CLUSTER_PW}"
 
-echo "Tutti i Secret sono stati iniettati con successo nel cluster Cloud!"
+echo "[OK] All Secrets have been successfully injected into the Cloud cluster!"

@@ -15,14 +15,14 @@ def lambda_handler(event, context):
         bucket = record['s3']['bucket']['name']
         key = urllib.parse.unquote_plus(record['s3']['object']['key'])
         
-        # Processiamo solo le immagini RAW
+        # Process only RAW images
         if not key.startswith('images/raw/'):
             print(f"Ignorato {key} (non in images/raw/)")
             continue
             
         print(f"Inizio elaborazione immagine: {key} dal bucket {bucket}")
         
-        # Otteniamo l'oggetto S3 per leggerne i metadati inseriti dal backend FastAPI
+        # Get S3 object to read backend metadata
         try:
             response = s3.get_object(Bucket=bucket, Key=key)
             metadata = response.get('Metadata', {})
@@ -36,8 +36,8 @@ def lambda_handler(event, context):
         vector_db_size = metadata.get('vector_db_size', 'subset')
         
         # --- IMAGE PROCESSING ---
-        # Qui potremmo usare la libreria PIL per ridimensionare l'immagine e alleggerirla.
-        # Per ora spostiamo l'immagine ottimizzata nella cartella finale per il worker.
+        # We could use PIL to resize and compress the image.
+        # For now, just move the optimized image to the final folder for the worker.
         optimized_key = f"images/optimized/{job_id}.jpg"
         
         try:
@@ -50,7 +50,7 @@ def lambda_handler(event, context):
             )
             print(f"Immagine elaborata e salvata in {optimized_key}")
             
-            # Opzionale: cancelliamo l'immagine originale RAW per pulizia
+            # Optional: delete the original RAW image to clean up
             s3.delete_object(Bucket=bucket, Key=key)
             
         except Exception as e:
@@ -58,7 +58,7 @@ def lambda_handler(event, context):
             continue
         
         # --- JOB QUEUEING ---
-        # Creiamo il payload esatto che si aspetta l'AI Worker in Kubernetes
+        # Create the exact payload expected by the AI Worker in Kubernetes
         job_message = {
             "job_id": job_id,
             "type": "custom",

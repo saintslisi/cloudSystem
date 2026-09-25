@@ -72,7 +72,7 @@ def get_vector_db_image(filename: str):
 
 @app.get("/static/test_images/{filename}")
 def get_test_image(filename: str):
-    # Prima controlla se è un'immagine custom caricata dall'utente localmente in /tmp
+    # First check if custom image uploaded locally in /tmp
     custom_path = "/tmp/local_custom_images/" + filename
     if os.path.exists(custom_path):
         return FileResponse(custom_path)
@@ -102,7 +102,7 @@ def get_inference_image(filename: str):
 
 @app.get("/api/v1/graph/{image_id}")
 def get_graph(image_id: str):
-    # Prova a leggere da Redis prima (per evitare problemi di FUSE/NTFS)
+    # Try reading from Redis first (avoid FUSE/NTFS issues)
     try:
         r = get_redis_client()
         if r:
@@ -112,7 +112,7 @@ def get_graph(image_id: str):
     except Exception as e:
         logging.warning(f"Errore lettura JSON da Redis per {image_id}: {e}")
 
-    # Fallback su S3
+    # Fallback to S3
     candidate_keys = [
         f"sceneGraph/json/inference/{image_id}.json",
         f"sceneGraph/json/fullset/{image_id}.json",
@@ -143,7 +143,7 @@ def get_job_graph(job_id: str):
     """
     Ritorna il JSON del grafo generato per un determinato job o immagine di test.
     """
-    # Prova a leggere da Redis prima (per evitare problemi di FUSE/NTFS)
+    # Try reading from Redis first (avoid FUSE/NTFS issues)
     try:
         r = get_redis_client()
         if r:
@@ -153,7 +153,7 @@ def get_job_graph(job_id: str):
     except Exception as e:
         logging.warning(f"Errore lettura JSON da Redis per {job_id}: {e}")
 
-    # Fallback su S3
+    # Fallback to S3
     candidate_keys = [
         f"sceneGraph/json/inference/{job_id}.json",
         f"sceneGraph/json/fullset/{job_id}.json",
@@ -220,7 +220,7 @@ def init_db():
                 return
         
     try:
-            # Inizializziamo dei dati finti per testare il frontend
+            # Initialize mock data to test frontend
             db = Session(engine)
             if db.query(TestImage).count() == 0:
                 images_to_insert = []
@@ -230,7 +230,7 @@ def init_db():
                     s3_client = boto3.client('s3', region_name=os.getenv("AWS_DEFAULT_REGION", "eu-central-1"))
                     bucket = "sistemi-cloud-data-santi"
                 
-                    # 1. Carica dal fullset in S3
+                    # 1. Load from fullset on S3
                     response = s3_client.list_objects_v2(Bucket=bucket, Prefix="images/fullset/Test/")
                     if 'Contents' in response:
                         for obj in response['Contents']:
@@ -243,7 +243,7 @@ def init_db():
                                     if len(images_to_insert) >= 25:
                                         break
                 
-                    # Se non c'è niente nel fullset, prova in fallback generico
+                    # Generic fallback if nothing in fullset
                     if not images_to_insert:
                         response = s3_client.list_objects_v2(Bucket=bucket, Prefix="images/imagesTest/")
                         if 'Contents' in response:
@@ -328,7 +328,7 @@ def delete_custom_test_image(image_id: str):
         db.close()
         raise HTTPException(status_code=404, detail="Immagine custom non trovata")
     
-    # Rimuovi file associato se esiste
+    # Remove associated file if it exists
     custom_dir = "/tmp/local_custom_images"
     if img.filename:
         file_path = os.path.join(custom_dir, img.filename)
@@ -346,13 +346,13 @@ def delete_custom_test_image(image_id: str):
 @app.post("/api/v1/save-custom-image/{job_id}")
 def save_custom_image(job_id: str):
     db = Session(engine)
-    # Controlla se esiste già
+    # Check if already exists
     existing = db.query(CustomTestImage).filter(CustomTestImage.id == job_id).first()
     if existing:
         db.close()
         return {"message": "Immagine già salvata nel sistema"}
 
-    # Cerca il file immagine salvato durante l'inferenza
+    # Search image file saved during inference
     inference_dir = "/tmp/local_inference_images"
     filename = None
     if os.path.exists(inference_dir):
@@ -407,7 +407,7 @@ def search(
     use_cache: Optional[str] = Form("true")
     ):
     
-    # Parsing manuale del booleano
+    # Manual boolean parsing
     is_cache_enabled = str(use_cache).lower() in ["true", "1", "yes"]
     if file is None and test_image_id is None and graph_json is None:
         raise HTTPException(status_code=400, detail="Missing file, test_image_id or graph_json")
@@ -424,7 +424,7 @@ def search(
                 ext = ".png"
             unique_filename = f"{job_id}{ext}"
             
-            # Save locally for serving later (since exFAT mount is read-only)
+            # Save locally for serving later (exFAT mount is read-only)
             local_inference_dir = "/tmp/local_inference_images"
             os.makedirs(local_inference_dir, exist_ok=True)
             local_path = os.path.join(local_inference_dir, unique_filename)
@@ -436,13 +436,13 @@ def search(
                 
             image_base64 = base64.b64encode(file_bytes).decode('utf-8')
             
-            # --- INTEGRAZIONE AWS LAMBDA ---
-            # Carichiamo l'immagine in images/raw/ su S3.
-            # Questo evento scatenerà automaticamente la Lambda Function che
-            # ottimizzerà l'immagine e scriverà in SQS il job!
+            # --- AWS LAMBDA INTEGRATION ---
+            # Upload image to images/raw/ on S3.
+            # This triggers the Lambda Function that
+            # optimizes the image and queues the job in SQS!
             import boto3
             s3_client = boto3.client('s3', region_name=AWS_REGION)
-            bucket = "sistemi-cloud-data-santi" # O la env var S3_BUCKET
+            bucket = "sistemi-cloud-data-santi" # Or S3_BUCKET env var
             s3_key = f"images/raw/{unique_filename}"
             s3_client.put_object(
                 Bucket=bucket,
@@ -462,7 +462,7 @@ def search(
             logging.error(f"Errore nella conversione/salvataggio dell'immagine: {str(e)}")
             raise HTTPException(status_code=500, detail="Failed to process uploaded file")
 
-    # Controllo cache
+    # Check cache
     if is_cache_enabled and test_image_id is not None:
         r = get_redis_client()
         result_json = None
@@ -500,7 +500,7 @@ def search(
             
             return {"job_id": job_id, "status": "COMPLETED", "cached": True}
 
-    # Se non c'è in cache, mettiamo in coda
+    # Queue if not in cache
     db = Session(engine)
     job = Job(job_id=job_id)
     db.add(job)
@@ -528,9 +528,9 @@ def search(
         "vector_db_size": vector_db_size
     }
     
-    # Se abbiamo caricato un'immagine custom, la Lambda si occuperà di accodare il Job.
-    # Altrimenti, se stiamo usando un'immagine già presente nella gallery (test_image_id),
-    # accodiamo il Job noi direttamente.
+    # For custom images, Lambda will queue the job.
+    # Otherwise, for gallery images,
+    # queue job directly.
     if file is None:
         success = publish_to_queue(message)
         if not success:
@@ -541,7 +541,7 @@ def search(
 
 @app.get("/api/v1/status/{job_id}")
 def get_status(job_id: str):
-    #cerco su Redis
+    # search on Redis
     r = get_redis_client()
     if r is None:
         raise HTTPException(status_code=500, detail="Redis connection failed")
@@ -550,13 +550,13 @@ def get_status(job_id: str):
     if job:
         return {"job":job, "message": "Job found in Redis"}
 
-    #Cerco su Postgres
+    # search on Postgres
     db = Session(engine)
     job = db.get(Job, job_id)
     if job is None:
         raise HTTPException(status_code=404, detail="Job not found")
 
-    #Aggiorno Redis con lo stato attuale preso da Postgres
+    # update Redis with Postgres state
     job_to_store : dict = {"job_id":job.job_id,"status":job.status,"result":job.result if job.result else ""}
     r.hset(job_id, mapping=job_to_store)
     r.expire(job_id, 3600)

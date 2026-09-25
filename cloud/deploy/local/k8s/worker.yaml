@@ -59,4 +59,4 @@ spec:
       - name: data-volume
         hostPath:
           path: /app/data
-          type: Directory
+          type: DirectoryOrCreate

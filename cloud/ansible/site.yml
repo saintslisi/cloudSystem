@@ -1,0 +1,56 @@
+---
+- name: Install K3s on Master Node
+  hosts: master
+  become: yes
+  tasks:
+    - name: Download and install K3s server
+      shell: curl -sfL https://get.k3s.io | sh -
+      args:
+        creates: /etc/systemd/system/k3s.service
+
+    - name: Wait for node-token to be generated
+      wait_for:
+        path: /var/lib/rancher/k3s/server/node-token
+
+    - name: Read node-token from master
+      slurp:
+        src: /var/lib/rancher/k3s/server/node-token
+      register: node_token_b64
+
+    - name: Store master node-token as fact
+      set_fact:
+        k3s_token: "{{ node_token_b64['content'] | b64decode | trim }}"
+
+    - name: Change permissions of k3s.yaml so ubuntu user can read it
+      file:
+        path: /etc/rancher/k3s/k3s.yaml
+        mode: '0644'
+
+    - name: Replace localhost IP with master node IP in kubeconfig
+      replace:
+        path: /etc/rancher/k3s/k3s.yaml
+        regexp: '127\.0\.0\.1'
+        replace: "{{ ansible_host | default(inventory_hostname) }}"
+
+    - name: Fetch kubeconfig to local machine
+      fetch:
+        src: /etc/rancher/k3s/k3s.yaml
+        dest: ../kubeconfig
+        flat: yes
+
+- name: Install K3s on Worker Nodes
+  hosts: workers
+  become: yes
+  vars:
+    master_ip: "{{ hostvars[groups['master'][0]]['private_ip'] | default(hostvars[groups['master'][0]]['ansible_host'] | default(groups['master'][0])) }}"
+    master_token: "{{ hostvars[groups['master'][0]]['k3s_token'] }}"
+  tasks:
+    - name: Download and install K3s agent
+      shell: curl -sfL https://get.k3s.io | K3S_URL=https://{{ master_ip }}:6443 K3S_TOKEN={{ master_token }} sh -
+      args:
+        creates: /etc/systemd/system/k3s-agent.service
+
+    - name: Ensure /app/data directory exists
+      file:
+        path: /app/data
+        state: directory
