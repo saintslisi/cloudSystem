@@ -20,6 +20,7 @@ source project_config.env
 
 echo -e "${YELLOW}[+] 1. AWS Infrastructure Provisioning (Terraform)...${NC}"
 cd cloud/deploy/aws/terraform
+terraform init
 terraform apply -auto-approve
 
 echo -e "${YELLOW}[+] 2. Extracting IP for Ansible...${NC}"
